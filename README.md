@@ -1,0 +1,277 @@
+# 📸 LocalFeed
+
+A TikTok-style vertical scrolling image viewer for your local photos. Scroll through images, GIFs, m4vs, and MP4s with smooth snap scrolling. Quickly delete or like photos for easy pruning unwanted photos or reminising on old memories.
+
+## Features
+
+- **TikTok-style scrolling** - Full-screen images that snap into place
+- **Mobile-optimized** - Designed for mobile with an option to Fill Screen for immersive viewing
+- **Cross-platform** - Works on both macOS, Windows, and Linux
+- **Folder management** - Easy web interface to add/remove folders
+- **Shuffle mode** - Randomize photo order each session for a fresh experience
+- **Jump to photo** - Quickly navigate to any photo by number
+- **Favorites** - Double-tap to favorite, filter to view only favorites
+- **Trash/Mark for Deletion** - Mark photos for deletion via menu, review and batch delete
+- **Performance optimized** - HTTP caching, image list caching, and video posters.
+- **Auto-Advance Mode** - Auto-scroll when video ends or after a configurable delay for photos
+
+
+
+## Quick Start
+
+### 1. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Start the Server
+
+**For development (simple):**
+```bash
+python server.py
+```
+
+**Change the port (if 7123 is in use):**
+```bash
+# Using command line argument
+python server.py --port 9000
+
+# Or using environment variable
+PORT=9000 python server.py
+```
+
+**Recommended for production:**
+
+*macOS/Linux:*
+```bash
+gunicorn -w 4 -b 0.0.0.0:7123 server:app
+```
+
+*Windows:*
+```bash
+waitress-serve --port=7123 server:app
+```
+
+You'll see output like:
+```
+==================================================
+  LocalFeed
+  TikTok-style image viewer
+==================================================
+
+  Access on this machine:    http://localhost:7123
+  Access remotely:    http://192.168.1.xxx:7123
+
+  For better performance with many images, use gunicorn:
+    gunicorn -w 4 -b 0.0.0.0:7123 server:app
+
+  Press Ctrl+C to stop the server
+==================================================
+```
+
+> **Note:** Configuration files (`config.json`, `favorites.json`, `trash.json`) are created automatically on first launch and are gitignored.
+
+### 3. Add Your Folders
+
+1. Open the URL shown in your browser
+2. Enter folder paths like:
+   - `/Users/Pictures/July Pictures`
+   - `~/Pictures/August`
+   - `/Users/Desktop/Photos`
+3. Click "Add" to add each folder
+
+### 4. Start Scrolling!
+
+Click "View Images" and scroll through your photos TikTok-style!
+
+## Usage from iPhone
+
+1. Make sure your modible device is on the same WiFi network as your server.
+2. Open the browser on your phone.
+3. Go to the URL shown when you started the server (e.g., `http://192.168.1.xxx:7123`)
+4. Add folders and start scrolling!
+
+## Navigation
+
+- **Swipe up/down** - Scroll to next/previous image
+- **Double-tap** - Add to favorites (TikTok-style heart animation; only adds, doesn't remove)
+- **Single tap (videos)** - Mute/unmute video
+- **Heart icon** - Toggle favorite for current image (can unlike)
+- **Trash icon** - Toggle mark for deletion
+- **Bookmark icon** - Filter to show only favorites
+- **Shuffle icon** - Toggle shuffle mode
+- **Settings gear** - Go to folder management and trash review
+- **Hamburger Menu** - Sort images or jump to a speific image number
+- **Search Icon** - Show all folders and search directly through them
+- **Tap folder name** - Filter to show only images from that folder
+
+## Keyboard Shortcuts
+
+For desktop users, the following keyboard shortcuts are available:
+
+| Key | Action |
+|-----|--------|
+| **H** or **Left Arrow** | Mark for deletion (toggle) |
+| **J** or **Down Arrow** | Scroll down one image |
+| **K** or **Up Arrow** | Scroll up one image |
+| **L** or **Right Arrow** | Like image (toggle favorite) |
+| **F** | Toggle favorites view |
+| **D** | Toggle trash/deletion folder view |
+| **M** | Mute/Unmute video |
+| **I** | Toggle Info modal |
+| **S** | Toggle Settings modal |
+| **?** | Toggle keyboard shortcuts help |
+| **Escape** | Close any open modal |
+
+Press **?** at any time to see the keyboard shortcuts popup.
+
+## Folder Browser
+
+Tap the **Folders** button at the top of the screen to quickly jump between your photo folders.
+
+**How it works:**
+- The folder list is **automatically populated** from your indexed directories
+- It shows all **leaf folders** (folders that actually contain images), not just the root folders you added in settings
+- For example, if you added `/Users/name/Pictures` in settings, you'll see individual folders like `Summer 2024`, `Family/July`, `Vacation` etc.
+- Each folder shows its image count
+- Use the **search box** to quickly filter folders by name or path
+- Tap any folder to filter your view to just that folder's images
+- The currently active folder is highlighted in gold
+
+This makes it easy to navigate large photo libraries without manually digging through folder structures!
+
+## Display Options
+
+In Settings, you can toggle:
+
+- **Shuffle Photos** - When enabled, photos are randomized each time you load the page. Perfect for discovering forgotten photos! Each page refresh gives you a new random order.
+
+## Supported Image & Video Formats
+
+- **Images:** JPG / JPEG, PNG, GIF, WebP, HEIC
+- **Videos:** m4v (under 75mb)
+
+### Video Loading
+
+When enabled, videos show a **poster frame** (blurred preview) first, then smoothly crossfade to the playing video when ready. This provides instant visual feedback while the video loads, with a smooth transition that eliminates black flashing.
+
+## Cross-Platform Support
+
+LocalFeed works on both **macOS** and **Windows**. The application handles platform-specific path separators automatically:
+
+- **macOS/Linux:** Uses forward slashes (`/Users/name/Pictures`)
+- **Windows:** Uses backslashes (`C:\Users\name\Pictures`)
+
+Path normalization is handled internally, so you can use either format when entering folder paths in the web interface.
+
+## Performance Features
+
+- **HTTP Caching** - Images are cached for 7 days with ETag support. Scrolling back doesn't re-download.
+- **304 Responses** - Modified images only are re-fetched when they change
+- **Image List Caching** - Folder scans are cached for 30 seconds to reduce disk I/O
+- **Production Server** - Use gunicorn (macOS/Linux) or waitress (Windows) for concurrent request handling
+
+### Performance Cache (Optional)
+
+For even faster loading, enable optional cache optimizations in **Settings → Performance Cache**:
+
+| Feature | Description | Benefit |
+|---------|-------------|--------|
+| **Image Thumbnails** | Resizes images to 1920px max, converts to WebP | 50-80% smaller files |
+| **Video Posters** | Extracts first frame as preview image | Instant preview while video loads |
+
+> **Requires ffmpeg** - Install separately:
+> - macOS: `brew install ffmpeg`
+> - Ubuntu: `sudo apt install ffmpeg`
+> - Windows: Download from [ffmpeg.org](https://ffmpeg.org/download.html)
+
+The `.thumbnails/` cache folder is automatically created when needed and stored in your project directory (gitignored).
+
+Tested on photo libraries up to 10,000.
+
+## Project Structure
+
+```
+LocalFeed/
+├── server.py              # Entry point - creates Flask app
+├── requirements.txt       # Python dependencies (flask, gunicorn)
+├── config.json            # Saved folder paths (gitignored, auto-generated)
+├── favorites.json         # Saved favorites (gitignored, auto-generated)
+├── trash.json             # Saved trash marks (gitignored, auto-generated)
+├── app/                   # Backend application package
+│   ├── __init__.py        # Flask app factory
+│   ├── config.py          # Configuration constants
+│   ├── routes/            # API route blueprints
+│   │   ├── images.py      # Image serving endpoints
+│   │   ├── folders.py     # Folder management
+│   │   ├── favorites.py   # Favorites API
+│   │   ├── trash.py       # Trash/mark-for-deletion API
+│   │   ├── cache.py       # Cache settings API
+│   │   └── pages.py       # HTML page routes
+│   └── services/          # Business logic services
+│       ├── data.py        # JSON data management
+│       ├── path_utils.py  # Path validation utilities
+│       ├── image_cache.py # Image list caching
+│       └── optimizations.py # Thumbnail/WebM conversion
+└── static/                # Frontend assets
+    ├── index.html         # Main HTML structure
+    ├── style.css          # TikTok-style CSS
+    └── js/                # ES6 JavaScript modules
+        ├── app.js         # Main application entry
+        ├── state.js       # Centralized state management
+        ├── api.js         # API client
+        └── utils/         # Utility modules
+            ├── path.js    # Path utilities
+            ├── gif.js     # GIF handling
+            └── video.js   # Video controls
+```
+
+## Troubleshooting
+
+### Can't access from Phone?
+- Make sure both devices are on the same WiFi network
+- Check if your computer's firewall is blocking port 7123
+- Try the IP address shown when starting the server
+
+### Images not loading?
+- Make sure the folder path is correct
+- Check that images are in supported formats
+- Look at the server console for error messages
+
+### GIFs loading slowly?
+- GIFs are large files. Once loaded, they're cached for 7 days
+- Use gunicorn for better concurrent handling
+- Consider the first load as "warming up" the cache
+
+### HEIC images not showing?
+- HEIC is supported but may not display in all browsers (try safari)
+- For best compatibility, convert HEIC to JPG first
+
+### Windows: `ModuleNotFoundError` or import conflicts?
+
+If you see errors like `No module named 'app'` or conflicts with other Python packages (ComfyUI, etc.), your system Python path may be polluted by other applications.
+
+**Solution: Create an isolated virtual environment**
+
+```powershell
+# Use 'py' launcher instead of 'python' to avoid embedded Python issues
+py -m venv venv
+
+# Activate the virtual environment
+.\venv\Scripts\activate
+
+# Install dependencies fresh
+pip install -r requirements.txt
+
+# Run the server
+waitress-serve --port=7123 server:app
+```
+
+> **Note:** Run `.\venv\Scripts\activate` each time you open a new terminal. You'll see `(venv)` in your prompt when active.
+
+**Why this happens:** Some applications (like ComfyUI portable) add their embedded Python to your system PATH, which can cause import conflicts. The `py` launcher uses the official Windows Python installation instead.
+
+## License
+
+MIT License - feel free to use and modify

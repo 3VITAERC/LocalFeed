@@ -1,0 +1,2512 @@
+/* LocalFeed - TikTok-style CSS */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --bg-dark: #000;
+    --bg-card: #111;
+    --text-primary: #fff;
+    --text-secondary: #888;
+    --accent: #fe2c55;
+    --success: #00c853;
+    --danger: #ff4444;
+}
+
+html, body {
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* ============ Scroll View (TikTok-style) ============ */
+
+.scroll-container {
+    height: 100vh;
+    width: 100vw;
+    overflow-y: scroll;
+    scroll-snap-type: y mandatory;
+    -webkit-overflow-scrolling: touch;
+    
+    /* Hide scrollbar */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.scroll-container::-webkit-scrollbar {
+    display: none;
+}
+
+.image-slide {
+    height: 100vh;
+    width: 100vw;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    scroll-snap-stop: always;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-dark);
+    position: relative;
+    
+    /* NOTE: content-visibility removed - causes issues on mobile Safari/Chrome */
+    /* Image pool recycling in JavaScript handles memory management instead */
+}
+
+.image-slide img,
+.image-slide video {
+    width: 100%;
+    height: auto;
+    max-height: 100%;
+    object-fit: contain;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    image-orientation: from-image; /* Respect EXIF orientation for JPEGs */
+}
+
+/* Desktop cutoff - limit image/video width on larger screens */
+@media screen and (min-width: 768px) {
+    .image-slide img,
+    .image-slide video {
+        width: auto;
+        max-width: 800px;
+    }
+}
+
+.image-slide img.loaded,
+.image-slide video.loaded {
+    opacity: 1;
+}
+
+/* ============ Fill Screen Mode (iPhone optimized) ============ */
+
+/* Fill Screen Mode - crops to fill viewport, no black bars */
+.image-slide.fill-screen img,
+.image-slide.fill-screen video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center center;
+}
+
+/* Desktop cutoff - revert to contain on larger screens */
+@media screen and (min-width: 768px) {
+    .image-slide.fill-screen img,
+    .image-slide.fill-screen video {
+        width: auto;
+        max-width: 800px;
+        height: auto;
+        max-height: 100%;
+        object-fit: contain;
+    }
+}
+
+/* Video error message */
+.video-error {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.7);
+    color: rgba(255, 255, 255, 0.7);
+    padding: 16px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    text-align: center;
+    z-index: 10;
+    pointer-events: none;
+    max-width: 80%;
+}
+
+/* ============ Video Poster & Crossfade ============ */
+
+/* Poster must override .image-slide img rules - use higher specificity */
+.image-slide .video-poster {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);  /* Center the poster like flexbox centers video */
+    width: 100%;                       /* Match video width */
+    height: auto;                      /* Match video height behavior */
+    max-height: 100%;                  /* Match video max-height */
+    object-fit: contain;
+    z-index: 1;
+    opacity: 0;
+    filter: blur(20px);                /* Start blurred for loading effect */
+    transition: opacity 0.3s ease, filter 0.8s ease 0.1s;  /* Delay unblur slightly */
+}
+
+.image-slide .video-poster.loaded {
+    opacity: 1;
+    filter: blur(0);                   /* Unblur when loaded */
+}
+
+.image-slide .video-poster.hidden {
+    opacity: 0;                        /* Fade out when video is ready */
+}
+
+/* Video needs higher z-index for crossfade with poster */
+.image-slide video {
+    z-index: 2;
+}
+
+/* Desktop cutoff for poster - must match video sizing exactly */
+@media screen and (min-width: 768px) {
+    .image-slide .video-poster {
+        width: auto;
+        max-width: 800px;
+    }
+}
+
+/* ============ Video Mute Icon (Instagram-style center overlay) ============ */
+
+.video-mute-icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px;
+    height: 60px;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 60;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.video-mute-icon.visible {
+    opacity: 1;
+}
+
+.video-mute-icon svg {
+    width: 32px;
+    height: 32px;
+    fill: white;
+}
+
+/* ============ Trash Icon Feedback (center overlay) ============ */
+
+.trash-icon-feedback {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.8);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 24px 32px;
+    background: rgba(0, 0, 0, 0.75);
+    border-radius: 16px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.trash-icon-feedback.visible {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+.trash-icon-feedback svg {
+    width: 48px;
+    height: 48px;
+    stroke: #FF2D55;
+}
+
+.trash-icon-feedback span {
+    font-size: 16px;
+    font-weight: 600;
+    color: white;
+    text-align: center;
+}
+
+/* ============ Video Progress Bar ============ */
+
+.video-progress-container {
+    position: absolute;
+    bottom: 66px; /* Moved down 10px from 56px */
+    left: 16px;
+    right: 16px; /* Full width at bottom */
+    height: 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 55;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.video-progress-bar {
+    flex: 1;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+    position: relative;
+    transition: height 0.15s ease;
+    cursor: pointer;
+}
+
+.video-progress-container:hover .video-progress-bar,
+.video-progress-container:active .video-progress-bar {
+    height: 5px;
+}
+
+.video-progress-filled {
+    height: 100%;
+    background: #fff;
+    border-radius: 2px;
+    width: 0%;
+    position: relative;
+}
+
+.video-progress-handle {
+    position: absolute;
+    right: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 12px;
+    background: #fff;
+    border-radius: 50%;
+    opacity: 1; /* Always visible for playhead indication */
+    transition: opacity 0.15s ease;
+}
+
+.video-progress-container:hover .video-progress-handle,
+.video-progress-container:active .video-progress-handle {
+    opacity: 1;
+}
+
+/* Time display - inline with progress bar */
+.video-time-display {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.8);
+    background: transparent; /* Removed black background */
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Safe area adjustments for video controls */
+@supports (padding-top: env(safe-area-inset-top)) {
+    .video-progress-container {
+        bottom: calc(66px + env(safe-area-inset-bottom));
+        left: calc(16px + env(safe-area-inset-left));
+    }
+}
+
+/* ============ Trash Marked Image Indicator ============ */
+
+/* Dark overlay for trashed images */
+.image-slide.trashed::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 10;
+    pointer-events: none;
+    border: 4px solid #FF3B30;
+    box-sizing: border-box;
+    box-shadow: inset 0 0 30px rgba(255, 59, 48, 0.3);
+}
+
+/* Badge for trashed images */
+.image-slide.trashed::after {
+    content: '🗑️ MARKED FOR DELETION → Swipe Right to Undo';
+    position: absolute;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 59, 48, 0.9);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 600;
+    z-index: 15;
+    pointer-events: none;
+    white-space: nowrap;
+    box-shadow: 0 2px 10px rgba(255, 59, 48, 0.5);
+}
+
+/* Loading spinner */
+.loading-spinner {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    border: 3px solid #333;
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ============ Initial Loading Overlay ============ */
+
+.loading-overlay {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+    pointer-events: none;
+}
+
+.loading-overlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+}
+
+.loading-spinner-main {
+    position: relative;
+    width: 60px;
+    height: 60px;
+}
+
+.spinner-ring {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border: 3px solid transparent;
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.spinner-ring:nth-child(2) {
+    width: 80%;
+    height: 80%;
+    top: 10%;
+    left: 10%;
+    border-top-color: rgba(254, 44, 85, 0.6);
+    animation-duration: 1.2s;
+    animation-direction: reverse;
+}
+
+.spinner-ring:nth-child(3) {
+    width: 60%;
+    height: 60%;
+    top: 20%;
+    left: 20%;
+    border-top-color: rgba(254, 44, 85, 0.3);
+    animation-duration: 1.5s;
+}
+
+
+/* ============ Right-Side Action Bar (TikTok Style) ============ */
+
+.action-bar {
+    position: fixed;
+    right: 24px;
+    bottom: 70px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    z-index: 100;
+}
+
+.action-btn {
+    width: 48px;
+    height: 48px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    color: white;
+    text-decoration: none;
+    position: relative;
+}
+
+.action-btn:active {
+    transform: scale(0.85);
+}
+
+.action-btn svg {
+    width: 26px;
+    height: 26px;
+    stroke: white;
+    stroke-width: 2;
+    fill: white;
+}
+
+/* Settings icon should remain outlined */
+#settingsBtn svg {
+    fill: none;
+}
+
+/* Info button should remain outlined */
+.info-btn svg {
+    fill: none !important;
+}
+
+/* Heart button specific styles */
+.action-btn.heart-action {
+    background: transparent;
+}
+
+.action-btn.heart-action.liked .heart-outline {
+    display: none;
+}
+
+.action-btn.heart-action.liked .heart-filled {
+    display: block !important;
+    fill: #FF2D55;
+    stroke: #FF2D55;
+}
+
+/* Filter badge */
+.filter-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    background: #FF2D55;
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Active state for filter and shuffle buttons */
+.action-btn.active {
+    background: transparent;
+}
+
+.action-btn.active svg {
+    stroke: #FF2D55;
+}
+
+/* Shuffle button - green when active */
+#shuffleBtn.active {
+    color: #00C853;
+}
+
+#shuffleBtn.active svg {
+    stroke: #00C853;
+    stroke-width: 2.5;
+    fill: none;
+}
+
+/* Filter/Favorites button - yellow fill when active (TikTok bookmark style) */
+#filterBtn.active svg {
+    fill: #FFD700;
+    stroke: #FFD700;
+}
+
+/* ============ TikTok-Style Top Navigation ============ */
+
+.top-nav {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    right: 16px;
+    height: 44px;
+    z-index: 100;
+}
+
+/* Safe area support */
+@supports (padding-top: env(safe-area-inset-top)) {
+    .top-nav {
+        top: calc(16px + env(safe-area-inset-top));
+        left: calc(16px + env(safe-area-inset-left));
+        right: calc(16px + env(safe-area-inset-right));
+    }
+}
+
+/* Filter Button (three-dot icon) */
+.top-nav-filter {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.top-nav-filter:hover,
+.top-nav-filter:active {
+    opacity: 1;
+}
+
+.top-nav-filter svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* Dropdown */
+.top-nav-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 8px;
+    min-width: 140px;
+    background: rgba(30, 30, 30, 0.95);
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px);
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+    overflow: hidden;
+    z-index: 100;
+}
+
+.top-nav-dropdown.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.top-nav-filter.open .top-nav-dropdown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.dropdown-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.dropdown-option:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.dropdown-option:active {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.dropdown-option svg {
+    width: 18px;
+    height: 18px;
+    stroke: rgba(255, 255, 255, 0.7);
+    flex-shrink: 0;
+}
+
+.dropdown-option span {
+    font-size: 14px;
+    color: white;
+    white-space: nowrap;
+}
+
+.dropdown-option.active {
+    background: rgba(255, 45, 85, 0.2);
+}
+
+.dropdown-option.active svg {
+    stroke: #FF2D55;
+}
+
+.dropdown-option.active span {
+    color: #FF2D55;
+}
+
+.dropdown-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 4px 0;
+}
+
+/* Folder Tabs Container - using absolute positioning for stability */
+.top-nav-tabs {
+    position: absolute;
+    left: 40px;
+    right: 40px;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+}
+
+.top-nav-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+/* Right-to-left sweep animation for tabs with smooth opacity */
+@keyframes sweepRightToLeft {
+    0% {
+        clip-path: inset(0 0 0 100%);
+        opacity: 0;
+    }
+    25% {
+        opacity: 0.4;
+    }
+    50% {
+        opacity: 0.7;
+    }
+    100% {
+        clip-path: inset(0 0 0 0);
+        opacity: 1;
+    }
+}
+
+.top-nav-tabs.animate-sweep {
+    animation: sweepRightToLeft 0.5s ease-out forwards;
+}
+
+/* Individual Tab */
+.top-nav-tab {
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+    scroll-snap-align: start;
+    transition: color 0.2s;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.top-nav-tab:hover {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.top-nav-tab.active {
+    color: white;
+}
+
+.top-nav-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: 2px;
+    left: 12px;
+    right: 12px;
+    height: 2px;
+    background: white;
+    border-radius: 1px;
+}
+
+/* Search Button */
+.top-nav-search {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.top-nav-search:hover,
+.top-nav-search:active {
+    opacity: 1;
+}
+
+.top-nav-search svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* Auto-Advance Indicator */
+.auto-advance-indicator {
+    position: fixed;
+    top: 70px;
+    right: 12px;
+    width: 36px;
+    height: 36px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 90;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transition: background 0.2s, transform 0.2s;
+}
+
+.auto-advance-indicator:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: scale(1.1);
+}
+
+.auto-advance-indicator svg {
+    width: 20px;
+    height: 20px;
+    animation: pulse-up 2s ease-in-out infinite;
+}
+
+@keyframes pulse-up {
+    0%, 100% { opacity: 0.7; transform: translateY(0); }
+    50% { opacity: 1; transform: translateY(-2px); }
+}
+
+/* Toast Notification */
+.toast-notification {
+    position: fixed;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 24px;
+    font-size: 14px;
+    z-index: 200;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    animation: toast-fade-in 0.3s ease-out;
+}
+
+@keyframes toast-fade-in {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+/* Settings Slider */
+.settings-slider {
+    width: 100px;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+.settings-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background: #fff;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.settings-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+.settings-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    background: #fff;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+}
+
+/* Hidden state for top nav */
+.top-nav.hidden {
+    display: none;
+}
+
+/* No images state */
+.no-images {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    text-align: center;
+    padding: 20px;
+    z-index: 100;
+    background: var(--bg-dark);
+}
+
+.no-images h2 {
+    margin-bottom: 15px;
+}
+
+.no-images p {
+    color: var(--text-secondary);
+    margin-bottom: 30px;
+}
+
+.no-images a,
+.no-images-settings-btn {
+    padding: 14px 28px;
+    background: var(--accent);
+    color: white;
+    text-decoration: none;
+    border-radius: 12px;
+    font-weight: 600;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+.no-images-settings-btn:active {
+    transform: scale(0.95);
+}
+
+/* Responsive adjustments for iPhone 15 Pro */
+@media screen and (max-width: 430px) {
+    .settings-container {
+        padding: 16px;
+    }
+    
+    .add-folder-form {
+        flex-direction: column;
+    }
+    
+    .add-folder-form button {
+        width: 100%;
+    }
+    
+    .stat-number {
+        font-size: 28px;
+    }
+}
+
+/* Safe area for iPhone notch */
+@supports (padding-top: env(safe-area-inset-top)) {
+    .view-images-btn {
+        bottom: calc(30px + env(safe-area-inset-bottom));
+    }
+}
+
+/* Jump to Photo Modal */
+.jump-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+}
+
+.jump-modal-content {
+    background: var(--bg-card);
+    padding: 24px;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 320px;
+    text-align: center;
+}
+
+.jump-modal-content h3 {
+    margin-bottom: 20px;
+    font-size: 18px;
+}
+
+.jump-input-group {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.jump-input-group input {
+    width: 100px;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 10px;
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    font-size: 18px;
+    text-align: center;
+    outline: none;
+}
+
+.jump-input-group input:focus {
+    box-shadow: 0 0 0 2px var(--accent);
+}
+
+.jump-total {
+    font-size: 16px;
+    color: var(--text-secondary);
+}
+
+.jump-buttons {
+    display: flex;
+    gap: 12px;
+}
+
+.jump-btn {
+    flex: 1;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+.jump-btn:active {
+    transform: scale(0.95);
+}
+
+.jump-btn.cancel {
+    background: #333;
+    color: var(--text-secondary);
+}
+
+.jump-btn.go {
+    background: var(--accent);
+    color: white;
+}
+
+/* ============ Heart Animation ============ */
+
+/* Heart animation overlay */
+.heart-animation {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    pointer-events: none;
+    z-index: 150;
+    opacity: 0;
+}
+
+.heart-animation svg {
+    width: 100px;
+    height: 100px;
+    filter: drop-shadow(0 4px 12px rgba(255, 45, 85, 0.5));
+}
+
+.heart-animation.show {
+    animation: heartPopFloat 1s ease-out forwards;
+}
+
+@keyframes heartPopFloat {
+    0% {
+        transform: translate(-50%, -50%) scale(0) rotate(var(--rotation, 0deg));
+        opacity: 1;
+    }
+    30% {
+        transform: translate(-50%, -50%) scale(1.2) rotate(var(--rotation, 0deg));
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, calc(-50% - 80px)) scale(1) rotate(var(--rotation, 0deg));
+        opacity: 0;
+    }
+}
+
+/* ============ Button Press Animations ============ */
+
+/* Heart button - smooth bounce with pulse */
+.action-btn.heart-action.animate-press {
+    animation: heartBounce 1.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes heartBounce {
+    0% { transform: scale(1); }
+    15% { transform: scale(1.3); }
+    30% { transform: scale(0.9); }
+    45% { transform: scale(1.15); }
+    60% { transform: scale(0.95); }
+    80% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+/* Trash button - smooth shake/wiggle */
+.action-btn.trash-action.animate-press {
+    animation: trashShake 1.5s ease-out;
+}
+
+@keyframes trashShake {
+    0%, 100% { transform: translateX(0) rotate(0deg); }
+    10% { transform: translateX(-4px) rotate(-6deg); }
+    20% { transform: translateX(4px) rotate(6deg); }
+    30% { transform: translateX(-4px) rotate(-4deg); }
+    40% { transform: translateX(4px) rotate(4deg); }
+    50% { transform: translateX(-3px) rotate(-3deg); }
+    60% { transform: translateX(3px) rotate(3deg); }
+    70% { transform: translateX(-2px) rotate(-2deg); }
+    80% { transform: translateX(2px) rotate(2deg); }
+    90% { transform: translateX(-1px) rotate(-1deg); }
+}
+
+/* Bookmark/Favorites button - quick scale with dip */
+#filterBtn.animate-press {
+    animation: bookmarkDip 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes bookmarkDip {
+    0% { transform: scale(1) rotate(0deg); }
+    30% { transform: scale(1.2) rotate(-10deg); }
+    60% { transform: scale(0.95) rotate(5deg); }
+    100% { transform: scale(1) rotate(0deg); }
+}
+
+/* Shuffle button - spin */
+#shuffleBtn.animate-press {
+    animation: shuffleSpin 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes shuffleSpin {
+    0% { transform: rotate(0deg) scale(1); }
+    40% { transform: rotate(180deg) scale(1.2); }
+    100% { transform: rotate(360deg) scale(1); }
+}
+
+/* Exit filter button */
+.exit-filter-btn {
+    padding: 14px 28px;
+    background: var(--accent);
+    color: white;
+    text-decoration: none;
+    border-radius: 12px;
+    font-weight: 600;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+.exit-filter-btn:active {
+    transform: scale(0.95);
+}
+
+/* ============ Photo Info Overlay (TikTok-style) ============ */
+
+.photo-info {
+    position: absolute;
+    bottom: 80px;
+    left: 16px;
+    right: 80px;
+    z-index: 50;
+    pointer-events: none;
+}
+
+.photo-info-folder {
+    font-size: 16px;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 4px;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.photo-info-folder::before {
+    content: "";
+    width: 16px;
+    height: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'%3E%3C/path%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    flex-shrink: 0;
+}
+
+/* Make folder name look clickable */
+.photo-info-folder.clickable {
+    pointer-events: auto;
+    cursor: pointer;
+    transition: opacity 0.2s, background 0.2s;
+    padding: 4px 8px;
+    margin: -4px -8px;
+    border-radius: 6px;
+}
+
+.photo-info-folder.clickable:hover {
+    opacity: 0.9;
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.photo-info-folder.clickable:active {
+    opacity: 0.7;
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.photo-info-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.9);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.4;
+}
+
+/* Safe area adjustments for action bar */
+@supports (padding-top: env(safe-area-inset-top)) {
+    .action-bar {
+        bottom: calc(70px + env(safe-area-inset-bottom));
+        right: calc(16px + env(safe-area-inset-right));
+    }
+    
+    .photo-info {
+        bottom: calc(80px + env(safe-area-inset-bottom));
+        left: calc(16px + env(safe-area-inset-left));
+    }
+}
+
+/* ============ Folders Button (Top of Screen) ============ */
+
+/* ============ Folder Mode Indicator (Legacy - kept for reference) ============ */
+/* Note: folder-indicator has been replaced by top-nav-tabs underline */
+
+/* ============ Info Modal ============ */
+
+.info-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 250;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.info-modal-content {
+    background: var(--bg-card);
+    padding: 0;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 360px;
+    max-height: 80vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.info-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.info-modal-header h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.info-modal-close {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background 0.2s, color 0.2s;
+    padding: 0;
+}
+
+.info-modal-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.info-modal-close:active {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.info-modal-close svg {
+    width: 20px;
+    height: 20px;
+}
+
+.info-modal-body {
+    padding: 16px 20px;
+    overflow-y: auto;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.info-item:last-child {
+    border-bottom: none;
+}
+
+.info-label {
+    font-size: 14px;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    margin-right: 16px;
+}
+
+.info-value {
+    font-size: 14px;
+    color: white;
+    text-align: right;
+    word-break: break-all;
+}
+
+.info-item.info-path {
+    flex-direction: column;
+}
+
+.info-path-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    margin-bottom: 8px;
+}
+
+.info-path-header .info-label {
+    margin: 0;
+}
+
+.copy-path-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: background 0.2s, color 0.2s;
+    padding: 0;
+}
+
+.copy-path-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.copy-path-btn:active {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.copy-path-btn.copied {
+    background: var(--success);
+    color: white;
+}
+
+.copy-path-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.info-item.info-path .info-label {
+    margin-bottom: 0;
+    margin-right: 0;
+}
+
+.info-item.info-path .info-value {
+    text-align: left;
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: rgba(0, 0, 0, 0.3);
+    padding: 10px 12px;
+    border-radius: 8px;
+    word-break: break-all;
+    line-height: 1.5;
+}
+
+.info-loading {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-secondary);
+}
+
+.info-error {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--danger);
+}
+
+/* ============ Keyboard Shortcuts Modal ============ */
+
+.shortcuts-modal-content {
+    background: var(--bg-card);
+    padding: 0;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 400px;
+    max-height: 85vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.shortcuts-modal-body {
+    padding: 16px 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.shortcuts-section {
+    margin-bottom: 20px;
+}
+
+.shortcuts-section:last-child {
+    margin-bottom: 0;
+}
+
+.shortcuts-section h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0 0 12px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.shortcut-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+}
+
+.shortcut-keys {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: white;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.key-separator {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: lowercase;
+}
+
+.shortcut-desc {
+    font-size: 14px;
+    color: var(--text-secondary);
+    text-align: right;
+}
+
+/* ============ Settings Modal ============ */
+
+.settings-modal-content {
+    background: var(--bg-card);
+    padding: 0;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 400px;
+    max-height: 85vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-modal-body {
+    padding: 16px 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* Add folder form in modal */
+.settings-add-folder-form {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 0;
+}
+
+.settings-add-folder-form input {
+    flex: 1;
+    padding: 12px 14px;
+    border: none;
+    border-radius: 10px;
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    font-size: 14px;
+    outline: none;
+}
+
+.settings-add-folder-form input::placeholder {
+    color: var(--text-secondary);
+}
+
+.settings-add-folder-form input:focus {
+    box-shadow: 0 0 0 2px var(--accent);
+}
+
+.settings-add-folder-form button {
+    padding: 12px 16px;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent);
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.1s, opacity 0.2s;
+}
+
+.settings-add-folder-form button:active {
+    transform: scale(0.95);
+}
+
+/* Settings message */
+.settings-message {
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 13px;
+}
+
+.settings-message.error {
+    background: rgba(255, 68, 68, 0.2);
+    color: var(--danger);
+}
+
+.settings-message.success {
+    background: rgba(0, 200, 83, 0.2);
+    color: var(--success);
+}
+
+/* Settings stats */
+.settings-stats {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.settings-stat-card {
+    flex: 1;
+    padding: 14px;
+    background: var(--bg-dark);
+    border-radius: 10px;
+    text-align: center;
+}
+
+.settings-stat-number {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.settings-stat-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Settings folder section */
+.settings-folder-section {
+    margin-bottom: 16px;
+}
+
+.settings-add-folder-section {
+    margin-top: 25px;
+}
+
+.settings-folder-list-section {
+    margin-top: 20px;
+}
+
+.settings-folder-section h4 {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+}
+
+.settings-folder-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: var(--bg-dark);
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+
+.settings-folder-path {
+    font-size: 13px;
+    word-break: break-all;
+    flex: 1;
+    margin-right: 10px;
+    color: var(--text-primary);
+}
+
+.settings-folder-remove {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 68, 68, 0.2);
+    color: var(--danger);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.2s;
+}
+
+.settings-folder-remove:active {
+    background: rgba(255, 68, 68, 0.4);
+}
+
+.settings-empty-state {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+/* ============ Folders Modal ============ */
+
+.folders-modal-content {
+    background: var(--bg-card);
+    padding: 0;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 400px;
+    max-height: 85vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.folders-modal-body {
+    padding: 0;
+    overflow: hidden;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Folders controls (search + sort) */
+.folders-controls {
+    display: flex;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    align-items: center;
+}
+
+/* Folders search box */
+.folders-search-container {
+    position: relative;
+    flex: 1;
+}
+
+.folders-search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    stroke: var(--text-secondary);
+    pointer-events: none;
+}
+
+.folders-search-input {
+    width: 100%;
+    padding: 10px 12px 10px 36px;
+    border: none;
+    border-radius: 10px;
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    font-size: 14px;
+    outline: none;
+}
+
+.folders-search-input::placeholder {
+    color: var(--text-secondary);
+}
+
+.folders-search-input:focus {
+    box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* Folders sort dropdown */
+.folders-sort-container {
+    flex-shrink: 0;
+}
+
+.folders-sort-select {
+    padding: 10px 12px;
+    padding-right: 32px;
+    border: none;
+    border-radius: 10px;
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+}
+
+.folders-sort-select:focus {
+    box-shadow: 0 0 0 2px var(--accent);
+}
+
+.folders-sort-select option {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+/* Folders list container */
+.folders-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px;
+}
+
+/* Folder item in modal - clickable to filter by folder */
+.folders-modal-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 14px;
+    background: var(--bg-dark);
+    border-radius: 10px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    gap: 12px;
+}
+
+.folders-modal-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.folders-modal-item:active {
+    transform: scale(0.98);
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.folders-modal-item.active {
+    background: rgba(255, 215, 0, 0.15);
+    border: 1px solid rgba(255, 215, 0, 0.3);
+}
+
+.folders-modal-item-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.folders-modal-item-icon svg {
+    width: 20px;
+    height: 20px;
+    stroke: #FFD700;
+}
+
+.folders-modal-item.active .folders-modal-item-icon svg {
+    stroke: #FFD700;
+}
+
+.folders-modal-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.folders-modal-item-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: white;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.folders-modal-item-path {
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.folders-modal-item-count {
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.1);
+    padding: 4px 8px;
+    border-radius: 12px;
+    flex-shrink: 0;
+}
+
+.folders-modal-item.active .folders-modal-item-count {
+    background: rgba(255, 215, 0, 0.2);
+    color: #FFD700;
+}
+
+.folders-modal-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-secondary);
+}
+
+.folders-modal-empty p {
+    margin-bottom: 16px;
+}
+
+.folders-modal-empty-btn {
+    padding: 12px 24px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+.folders-modal-empty-btn:active {
+    transform: scale(0.95);
+}
+
+/* ============ Trash Button Styles ============ */
+
+/* Trash button specific styles */
+.action-btn.trash-action {
+    background: transparent;
+}
+
+/* Default: outlined trash icon (stroke only, no fill) */
+.action-btn.trash-action .trash-outline {
+    display: block;
+    fill: none;
+    stroke: white;
+}
+
+.action-btn.trash-action .trash-filled {
+    display: none;
+}
+
+/* When trashed: outlined red trash icon (no fill) */
+.action-btn.trash-action.trashed .trash-outline {
+    display: block;
+    fill: none;
+    stroke: #FF3B30;
+}
+
+.action-btn.trash-action.trashed .trash-filled {
+    display: none;
+}
+
+/* ============ Trash Animation ============ */
+
+.trash-animation {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    pointer-events: none;
+    z-index: 150;
+    opacity: 0;
+    transition: none;
+}
+
+.trash-animation svg {
+    width: 120px;
+    height: 120px;
+    fill: none;
+    stroke: #FF3B30;
+    stroke-width: 2;
+    filter: drop-shadow(0 4px 12px rgba(255, 59, 48, 0.5));
+}
+
+.trash-animation.show {
+    animation: trashPop 0.8s ease-out forwards;
+}
+
+@keyframes trashPop {
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 1;
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.2);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0;
+    }
+}
+
+/* ============ Trash Modal ============ */
+
+.trash-modal-content {
+    background: var(--bg-card);
+    padding: 0;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 400px;
+    max-height: 80vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.trash-modal-body {
+    padding: 20px;
+}
+
+.trash-info {
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.trash-info p {
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 12px;
+}
+
+.trash-count-info {
+    font-size: 16px;
+    font-weight: 600;
+    color: white;
+}
+
+.trash-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.trash-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 14px 20px;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.1s, background 0.2s;
+}
+
+.trash-action-btn:active {
+    transform: scale(0.98);
+}
+
+.trash-action-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+.view-trash-btn {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.view-trash-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.empty-trash-btn {
+    background: rgba(255, 59, 48, 0.15);
+    color: #FF3B30;
+}
+
+.empty-trash-btn:hover:not(:disabled) {
+    background: rgba(255, 59, 48, 0.25);
+}
+
+.empty-trash-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ============ Delete Confirmation Modal ============ */
+
+.delete-confirm-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 300;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.delete-confirm-content {
+    background: var(--bg-card);
+    padding: 32px 24px;
+    border-radius: 20px;
+    width: 90%;
+    max-width: 340px;
+    text-align: center;
+}
+
+.delete-confirm-icon {
+    margin-bottom: 20px;
+}
+
+.delete-confirm-icon svg {
+    width: 64px;
+    height: 64px;
+    stroke: #FF3B30;
+}
+
+.delete-confirm-content h3 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: white;
+}
+
+.delete-confirm-content p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 24px;
+}
+
+.delete-confirm-buttons {
+    display: flex;
+    gap: 12px;
+}
+
+.delete-confirm-btn {
+    flex: 1;
+    padding: 14px 20px;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+.delete-confirm-btn:active {
+    transform: scale(0.98);
+}
+
+.delete-confirm-btn.cancel {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.delete-confirm-btn.delete {
+    background: #FF3B30;
+    color: white;
+}
+
+/* ============ Settings Trash Section ============ */
+
+.settings-trash-section {
+    padding: 16px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.settings-trash-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 14px 20px;
+    background: rgba(255, 59, 48, 0.1);
+    border: 1px solid rgba(255, 59, 48, 0.2);
+    border-radius: 12px;
+    color: #FF3B30;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.settings-trash-btn:hover {
+    background: rgba(255, 59, 48, 0.15);
+}
+
+.settings-trash-btn:active {
+    transform: scale(0.98);
+}
+
+.settings-trash-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+.trash-badge {
+    background: #FF3B30;
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    min-width: 20px;
+    text-align: center;
+}
+
+/* ============ Settings Cache Section ============ */
+
+.settings-cache-section {
+    padding: 16px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Collapsible Header */
+.settings-cache-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    padding: 4px 0;
+    user-select: none;
+}
+
+.settings-cache-header:hover {
+    opacity: 0.8;
+}
+
+.settings-cache-header h4 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.settings-cache-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.3s ease;
+}
+
+.settings-cache-section.expanded .settings-cache-arrow {
+    transform: rotate(180deg);
+}
+
+.settings-cache-description {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 16px;
+    line-height: 1.4;
+}
+
+.ffmpeg-required {
+    color: #00FF00;
+    font-weight: 500;
+}
+
+.settings-cache-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.settings-cache-item:last-of-type {
+    border-bottom: none;
+}
+
+.settings-cache-info {
+    display: flex;
+    align-items: center;
+    flex: 1;
+}
+
+.settings-cache-text {
+    flex: 1;
+}
+
+.settings-cache-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: white;
+    margin-bottom: 2px;
+}
+
+.settings-cache-desc {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.settings-cache-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    margin-top: 8px;
+}
+
+/* Toggle Switch */
+.settings-toggle {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.settings-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.settings-toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.2);
+    transition: 0.3s;
+    border-radius: 24px;
+}
+
+.settings-toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+.settings-toggle input:checked + .settings-toggle-slider {
+    background-color: #34C759;
+}
+
+.settings-toggle input:checked + .settings-toggle-slider:before {
+    transform: translateX(20px);
+}
+
+/* Clear Cache Button */
+.settings-clear-cache-btn {
+    padding: 8px 16px;
+    background: rgba(255, 59, 48, 0.1);
+    border: 1px solid rgba(255, 59, 48, 0.3);
+    border-radius: 8px;
+    color: #FF3B30;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.settings-clear-cache-btn:hover {
+    background: rgba(255, 59, 48, 0.2);
+}
+
+.settings-clear-cache-btn:active {
+    transform: scale(0.98);
+}
+
+/* ============ File Path Display ============ */
+
+.file-path-display {
+    position: fixed;
+    bottom: 71px; /* Moved down 15px from 86px to sit just above video progress bar */
+    left: 16px; /* Match video progress bar left position */
+    right: 46px; /* 30px extra from right to avoid overlapping settings icon */
+    max-width: none; /* Remove max-width constraint to match video bar width */
+    padding: 0;
+    background: transparent;
+    font-size: 14px; /* Increased 15% from 12px */
+    color: rgba(255, 255, 255, 0.7);
+    z-index: 100;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.file-path-folder {
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 16px; /* Increased 15% from 14px */
+    font-weight: 600;
+    margin-bottom: 4px;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.file-path-folder:hover {
+    color: rgba(255, 255, 255, 1);
+}
+
+.file-path-filename {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 14px; /* Increased 15% from 12px */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ============ Double-Tap Heart Animation ============ */
+
+.double-tap-heart {
+    position: absolute;
+    width: 80px;
+    height: 80px;
+    animation: heartPop 0.75s ease-out forwards;
+    pointer-events: none;
+    z-index: 100;
+}
+
+.double-tap-heart svg {
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 0 20px rgba(255, 45, 85, 0.5));
+}
+
+@keyframes heartPop {
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0;
+    }
+    20% {
+        transform: translate(-50%, -50%) scale(1.2);
+        opacity: 1;
+    }
+    33% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+    /* Hold in place until 33% (~0.25s), then rise up 50px and fade */
+    66% {
+        transform: translate(-50%, calc(-50% - 50px)) scale(1);
+        opacity: 0;
+    }
+    100% {
+        transform: translate(-50%, calc(-50% - 50px)) scale(1);
+        opacity: 0;
+    }
+}
+
+/* ============ Info Modal Rows ============ */
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.info-row:last-child {
+    border-bottom: none;
+}
+
+.info-row .info-label {
+    font-size: 14px;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    margin-right: 16px;
+}
+
+.info-row .info-value {
+    font-size: 14px;
+    color: var(--text-primary);
+    text-align: right;
+    word-break: break-all;
+}
+
+.info-row .info-path {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    max-width: 200px;
+}
+
+/* ============ Settings Folder List ============ */
+
+.settings-folder-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+
+.settings-folder-path {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.8);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.settings-folder-remove {
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: rgba(255, 59, 48, 0.2);
+    color: #FF3B30;
+    border-radius: 50%;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 10px;
+    flex-shrink: 0;
+}
+
+.settings-folder-remove:hover {
+    background: rgba(255, 59, 48, 0.3);
+}
+
+/* ============ Cache Settings Header ============ */
+
+.settings-cache-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    padding: 12px 0;
+}
+
+.settings-cache-header:hover {
+    opacity: 0.8;
+}
+
+.settings-cache-header.expanded .settings-cache-arrow svg {
+    transform: rotate(180deg);
+}
+
+.settings-cache-arrow svg {
+    transition: transform 0.2s;
+}
+
+/* ============ Info Loading ============ */
+
+.info-loading {
+    text-align: center;
+    padding: 20px;
+    color: rgba(255, 255, 255, 0.5);
+}
+

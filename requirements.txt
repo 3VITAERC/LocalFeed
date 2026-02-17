@@ -1,0 +1,34 @@
+# LocalFeed Dependencies
+# Install all: pip install -r requirements.txt
+
+# =============================================================================
+# CORE (Required)
+# =============================================================================
+
+flask>=2.0.0              # Web framework - required to run the server
+flask-compress>=1.14.0    # Gzip compression for API responses
+
+# =============================================================================
+# OPTIONAL - Enhanced Features
+# =============================================================================
+
+Pillow>=10.0.0            # Image dimensions & EXIF metadata extraction
+                          # Without this, images still work but no metadata shown
+
+# =============================================================================
+# OPTIONAL - Performance Cache (requires system binary)
+# =============================================================================
+
+# ffmpeg - Required for Performance Cache features (video poster, GIF→WebM)
+# Install separately (not a pip package):
+#   macOS:  brew install ffmpeg
+#   Ubuntu: sudo apt install ffmpeg
+#   Windows: Download from https://ffmpeg.org/download.html
+
+# =============================================================================
+# OPTIONAL - Production Servers
+# =============================================================================
+
+gunicorn>=21.0.0; sys_platform != 'win32'   # Production server for macOS/Linux
+waitress>=2.1.0; sys_platform == 'win32'    # Production server for Windows
+                          # Both optional - Flask's dev server works for personal use

@@ -1,0 +1,2424 @@
+/**
+ * Main application entry point for LocalFeed.
+ * Initializes all components and sets up event handlers.
+ */
+
+// Import state management
+import { state, BATCH_SIZE, IMAGE_POOL_BUFFER, getPreloadCount, isAnyModalOpen } from './state.js';
+
+// Import utilities
+import { extractPath, isGifUrl, isVideoUrl, isConvertedGifUrl, normalizePath } from './utils/path.js';
+import { freezeGif, unfreezeGif } from './utils/gif.js';
+import { toggleVideoMute, showMuteIconFeedback, setupVideoProgress, addVideoControls, formatVideoTime } from './utils/video.js';
+
+// Import API client
+import API from './api.js';
+
+// DOM Elements - initialized after DOM is ready
+let scrollContainer, noImages, noFavorites, jumpModal, jumpInput, jumpTotal;
+let jumpCancel, jumpGo, trashAnimation, exitFilterBtn, noTrash, exitTrashBtn;
+let loadingOverlay;
+let heartBtn, trashBtn, filterBtn, filterBadge, shuffleBtn, infoBtn, settingsBtn;
+let noImagesSettingsBtn;
+let trashModal, trashModalClose, trashModalBody, trashCountInfo, viewTrashBtn, emptyTrashBtn;
+let deleteConfirmModal, deleteConfirmMessage, deleteCancelBtn, deleteConfirmBtn;
+let infoModal, infoModalBody, infoModalClose;
+let topNav, topNavFilter, topNavDropdown, topNavTabs, topNavSearch;
+let foldersModal, foldersModalClose, foldersModalBody, foldersSearchInput, foldersSortSelect, foldersList;
+let settingsModal, settingsModalClose;
+let shortcutsModal, shortcutsModalClose;
+let filePathDisplay;
+
+// Image pool management
+let imagePoolUpdatePending = false;
+let imagePoolRafId = null;
+
+// Folders modal state
+let leafFolders = [];
+let currentFolderSort = 'count';
+let searchDebounceTimer = null;
+
+// Auto-advance timer
+let autoAdvanceTimer = null;
+
+// ============ Initialization ============
+
+/**
+ * Initialize the application
+ */
+async function init() {
+    // Get DOM elements
+    initDOMElements();
+    
+    // Set up event listeners
+    setupEventListeners();
+    
+    // Initialize observers BEFORE loading data (so they're ready when slides are built)
+    setupObservers();
+    
+    // Load initial data
+    await loadInitialData();
+    
+    // Initialize top nav (delayed)
+    initTopNav();
+}
+
+/**
+ * Initialize DOM element references
+ */
+function initDOMElements() {
+    scrollContainer = document.getElementById('scrollContainer');
+    noImages = document.getElementById('noImages');
+    noFavorites = document.getElementById('noFavorites');
+    jumpModal = document.getElementById('jumpModal');
+    jumpInput = document.getElementById('jumpInput');
+    jumpTotal = document.getElementById('jumpTotal');
+    jumpCancel = document.getElementById('jumpCancel');
+    jumpGo = document.getElementById('jumpGo');
+    trashAnimation = document.getElementById('trashAnimation');
+    exitFilterBtn = document.getElementById('exitFilterBtn');
+    noTrash = document.getElementById('noTrash');
+    exitTrashBtn = document.getElementById('exitTrashBtn');
+    
+    // Loading overlay
+    loadingOverlay = document.getElementById('loadingOverlay');
+    
+    // Action Bar
+    heartBtn = document.getElementById('heartBtn');
+    trashBtn = document.getElementById('trashBtn');
+    filterBtn = document.getElementById('filterBtn');
+    filterBadge = document.getElementById('filterBadge');
+    shuffleBtn = document.getElementById('shuffleBtn');
+    infoBtn = document.getElementById('infoBtn');
+    settingsBtn = document.getElementById('settingsBtn');
+    noImagesSettingsBtn = document.getElementById('noImagesSettingsBtn');
+    
+    // File path display
+    filePathDisplay = document.getElementById('filePathDisplay');
+    
+    // Modals
+    trashModal = document.getElementById('trashModal');
+    trashModalClose = document.getElementById('trashModalClose');
+    trashModalBody = document.getElementById('trashModalBody');
+    trashCountInfo = document.getElementById('trashCountInfo');
+    viewTrashBtn = document.getElementById('viewTrashBtn');
+    emptyTrashBtn = document.getElementById('emptyTrashBtn');
+    
+    deleteConfirmModal = document.getElementById('deleteConfirmModal');
+    deleteConfirmMessage = document.getElementById('deleteConfirmMessage');
+    deleteCancelBtn = document.getElementById('deleteCancelBtn');
+    deleteConfirmBtn = document.getElementById('deleteConfirmBtn');
+    
+    infoModal = document.getElementById('infoModal');
+    infoModalBody = document.getElementById('infoModalBody');
+    infoModalClose = document.getElementById('infoModalClose');
+    
+    settingsModal = document.getElementById('settingsModal');
+    settingsModalClose = document.getElementById('settingsModalClose');
+    
+    shortcutsModal = document.getElementById('shortcutsModal');
+    shortcutsModalClose = document.getElementById('shortcutsModalClose');
+    
+    // Top Nav
+    topNav = document.getElementById('topNav');
+    topNavFilter = document.getElementById('topNavFilter');
+    topNavDropdown = document.getElementById('topNavDropdown');
+    topNavTabs = document.getElementById('topNavTabs');
+    topNavSearch = document.getElementById('topNavSearch');
+    
+    // Folders Modal
+    foldersModal = document.getElementById('foldersModal');
+    foldersModalClose = document.getElementById('foldersModalClose');
+    foldersModalBody = document.getElementById('foldersModalBody');
+    foldersSearchInput = document.getElementById('foldersSearchInput');
+    foldersSortSelect = document.getElementById('foldersSortSelect');
+    foldersList = document.getElementById('foldersList');
+}
+
+/**
+ * Set up all event listeners
+ */
+function setupEventListeners() {
+    // Keyboard shortcuts
+    document.addEventListener('keydown', handleKeyboard, true);
+    
+    // Action bar buttons
+    if (heartBtn) heartBtn.addEventListener('click', toggleFavorite);
+    if (trashBtn) trashBtn.addEventListener('click', toggleTrash);
+    if (filterBtn) filterBtn.addEventListener('click', toggleFavoritesMode);
+    if (shuffleBtn) shuffleBtn.addEventListener('click', toggleShuffle);
+    if (infoBtn) infoBtn.addEventListener('click', showInfoModal);
+    if (settingsBtn) settingsBtn.addEventListener('click', showSettingsModal);
+    if (noImagesSettingsBtn) noImagesSettingsBtn.addEventListener('click', showSettingsModal);
+    
+    // Double-tap to like
+    setupDoubleTapToLike();
+    
+    // Jump modal
+    if (jumpCancel) jumpCancel.addEventListener('click', hideJumpModal);
+    if (jumpGo) jumpGo.addEventListener('click', handleJump);
+    if (jumpInput) jumpInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleJump();
+        if (e.key === 'Escape') hideJumpModal();
+    });
+    
+    // Exit buttons
+    if (exitFilterBtn) exitFilterBtn.addEventListener('click', exitFavoritesMode);
+    if (exitTrashBtn) exitTrashBtn.addEventListener('click', exitTrashMode);
+    
+    // Modal close buttons
+    if (infoModalClose) infoModalClose.addEventListener('click', hideInfoModal);
+    if (settingsModalClose) settingsModalClose.addEventListener('click', hideSettingsModal);
+    if (shortcutsModalClose) shortcutsModalClose.addEventListener('click', hideShortcutsModal);
+    if (foldersModalClose) foldersModalClose.addEventListener('click', hideFoldersModal);
+    if (trashModalClose) trashModalClose.addEventListener('click', hideTrashModal);
+    
+    // Modal backdrop clicks
+    [infoModal, settingsModal, shortcutsModal, foldersModal, trashModal, deleteConfirmModal].forEach(modal => {
+        if (modal) {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        }
+    });
+    
+    // Top nav
+    if (topNavFilter) topNavFilter.addEventListener('click', toggleTopNavDropdown);
+    if (topNavSearch) topNavSearch.addEventListener('click', showFoldersModal);
+    
+    // Top nav dropdown options
+    document.querySelectorAll('.dropdown-option').forEach(option => {
+        option.addEventListener('click', (e) => {
+            e.stopPropagation();
+            handleDropdownOption(option.dataset.sort);
+        });
+    });
+    
+    // Folders modal search and sort
+    if (foldersSearchInput) {
+        foldersSearchInput.addEventListener('input', (e) => {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => {
+                renderFoldersModalList(e.target.value);
+            }, 150);
+        });
+    }
+    
+    if (foldersSortSelect) {
+        foldersSortSelect.addEventListener('change', (e) => {
+            currentFolderSort = e.target.value;
+            renderFoldersModalList(foldersSearchInput?.value || '');
+        });
+    }
+    
+    // Trash modal buttons
+    if (viewTrashBtn) viewTrashBtn.addEventListener('click', viewTrash);
+    if (emptyTrashBtn) emptyTrashBtn.addEventListener('click', confirmEmptyTrash);
+    if (deleteCancelBtn) deleteCancelBtn.addEventListener('click', hideDeleteConfirm);
+    if (deleteConfirmBtn) deleteConfirmBtn.addEventListener('click', executeEmptyTrash);
+    
+    // Cache optimization toggles - set up once during initialization
+    const thumbnailToggle = document.getElementById('toggleThumbnailCache');
+    const videoPosterToggle = document.getElementById('toggleVideoPoster');
+    
+    if (thumbnailToggle) {
+        thumbnailToggle.addEventListener('change', async (e) => {
+            try {
+                await API.updateSettings({ optimizations: { thumbnail_cache: e.target.checked } });
+                state.optimizations.thumbnail_cache = e.target.checked;
+                console.log('Thumbnail cache setting saved:', e.target.checked);
+                // Reload images to use new setting
+                if (e.target.checked) {
+                    location.reload();
+                }
+            } catch (error) {
+                console.error('Failed to save thumbnail cache setting:', error);
+            }
+        });
+    }
+    if (videoPosterToggle) {
+        videoPosterToggle.addEventListener('change', async (e) => {
+            try {
+                await API.updateSettings({ optimizations: { video_poster_cache: e.target.checked } });
+                state.optimizations.video_poster_cache = e.target.checked;
+                console.log('Video poster cache setting saved:', e.target.checked);
+                // Reload images to use new setting
+                if (e.target.checked) {
+                    location.reload();
+                }
+            } catch (error) {
+                console.error('Failed to save video poster cache setting:', error);
+            }
+        });
+    }
+    
+    // Fill screen toggle
+    const fillScreenToggle = document.getElementById('toggleFillScreen');
+    if (fillScreenToggle) {
+        fillScreenToggle.addEventListener('change', async (e) => {
+            try {
+                await API.updateSettings({ optimizations: { fill_screen: e.target.checked } });
+                state.optimizations.fill_screen = e.target.checked;
+                console.log('Fill screen setting saved:', e.target.checked);
+                // Rebuild slides to apply new class
+                buildSlides();
+                prioritizeFirstImage(state.currentIndex);
+            } catch (error) {
+                console.error('Failed to save fill screen setting:', error);
+            }
+        });
+    }
+    
+    // Auto-advance toggle
+    const autoAdvanceToggle = document.getElementById('toggleAutoAdvance');
+    if (autoAdvanceToggle) {
+        autoAdvanceToggle.addEventListener('change', async (e) => {
+            try {
+                await API.updateSettings({ optimizations: { auto_advance: e.target.checked } });
+                state.optimizations.auto_advance = e.target.checked;
+                console.log('Auto-advance setting saved:', e.target.checked);
+                
+                // Update indicator visibility
+                updateAutoAdvanceIndicator();
+                
+                // Start timer if enabled and on a photo
+                if (e.target.checked) {
+                    startAutoAdvanceTimer();
+                } else {
+                    clearAutoAdvanceTimer();
+                }
+                
+                // Rebuild slides to update video loop behavior
+                buildSlides();
+                prioritizeFirstImage(state.currentIndex);
+            } catch (error) {
+                console.error('Failed to save auto-advance setting:', error);
+            }
+        });
+    }
+    
+    // Auto-advance delay slider
+    const autoAdvanceDelaySlider = document.getElementById('autoAdvanceDelaySlider');
+    const autoAdvanceDelayValue = document.getElementById('autoAdvanceDelayValue');
+    if (autoAdvanceDelaySlider && autoAdvanceDelayValue) {
+        autoAdvanceDelaySlider.addEventListener('input', async (e) => {
+            const delay = parseInt(e.target.value);
+            autoAdvanceDelayValue.textContent = delay;
+            state.optimizations.auto_advance_delay = delay;
+            
+            try {
+                await API.updateSettings({ optimizations: { auto_advance_delay: delay } });
+                console.log('Auto-advance delay saved:', delay);
+            } catch (error) {
+                console.error('Failed to save auto-advance delay:', error);
+            }
+        });
+    }
+    
+    // Auto-advance indicator click (toggles off)
+    const autoAdvanceIndicator = document.getElementById('autoAdvanceIndicator');
+    if (autoAdvanceIndicator) {
+        autoAdvanceIndicator.addEventListener('click', toggleAutoAdvanceOff);
+    }
+}
+
+/**
+ * Load initial data from API
+ */
+async function loadInitialData() {
+    try {
+        // Load settings FIRST so optimization settings are available before images
+        const settings = await API.getSettings();
+        
+        // Store optimization settings before loading any images
+        if (settings.optimizations) {
+            state.optimizations = settings.optimizations;
+            console.log('[Init] Optimization settings loaded:', state.optimizations);
+        }
+        state.shuffleEnabled = settings.shuffle;
+        
+        // Initialize auto-advance indicator visibility
+        updateAutoAdvanceIndicator();
+        
+        // Now load images with current sort order
+        state.images = await API.getImages(state.currentSortOrder);
+        
+        // Load favorites and trash
+        const [favoritesData, trashData] = await Promise.all([
+            API.getFavorites(),
+            API.getTrash(),
+        ]);
+        
+        state.favorites = new Set(favoritesData.favorites.map(url => extractPath(url)));
+        state.trash = new Set(trashData.trash.map(url => extractPath(url)));
+        
+        // Apply shuffle if enabled on initial load
+        if (state.shuffleEnabled && state.images.length > 0) {
+            state.unshuffledImages = [...state.images];
+            shuffleArray(state.images);
+        }
+        
+        // Update UI
+        updateFilterBadge();
+        updateShuffleButton();
+        updateUI(); // Update file path display on initial load
+        
+        // Build slides
+        if (state.images.length > 0) {
+            buildSlides();
+            prioritizeFirstImage();
+            
+            // Start auto-advance timer if enabled (after initial load)
+            if (state.optimizations.auto_advance) {
+                // Delay slightly to allow first image to be visible
+                setTimeout(() => {
+                    startAutoAdvanceTimer();
+                }, 500);
+            }
+        } else {
+            hideLoadingOverlay();
+            showNoImages();
+        }
+        
+    } catch (error) {
+        console.error('Failed to load initial data:', error);
+        hideLoadingOverlay();
+        showNoImages();
+    }
+}
+
+// ============ Slide Building ============
+
+/**
+ * Build slides for all images
+ */
+function buildSlides() {
+    if (!scrollContainer) return;
+    
+    scrollContainer.innerHTML = '';
+    state.slidesCreated = state.images.length;
+    
+    // Create slide elements
+    state.images.forEach((src, index) => {
+        const slide = document.createElement('div');
+        slide.className = 'image-slide';
+        
+        // Apply fill-screen class if enabled
+        if (state.optimizations.fill_screen) {
+            slide.classList.add('fill-screen');
+        }
+        
+        slide.dataset.index = index;
+        slide.dataset.src = src;
+        scrollContainer.appendChild(slide);
+    });
+    
+    // Observe slides
+    observeSlides();
+}
+
+/**
+ * Show no images message
+ */
+function showNoImages() {
+    if (noImages) noImages.style.display = 'flex';
+    if (scrollContainer) scrollContainer.innerHTML = '';
+}
+
+// ============ Image Loading ============
+
+/**
+ * Load image for a slide
+ * @param {HTMLElement} slide - The slide element
+ * @param {boolean} isPriorityImage - If true, hide loading overlay when loaded
+ */
+function loadImageForSlide(slide, isPriorityImage = false) {
+    const src = slide.dataset.src;
+    if (!src) return;
+    
+    if (isVideoUrl(src)) {
+        loadVideoForSlide(slide, src, false, isPriorityImage);
+    } else if (isGifUrl(src)) {
+        loadGifForSlide(slide, src, isPriorityImage);
+    } else {
+        loadStaticImageForSlide(slide, src, isPriorityImage);
+    }
+}
+
+/**
+ * Load static image for a slide
+ * Uses thumbnail endpoint if thumbnail_cache is enabled
+ * @param {HTMLElement} slide - The slide element
+ * @param {string} src - The image source URL
+ * @param {boolean} isPriorityImage - If true, hide loading overlay when loaded
+ */
+function loadStaticImageForSlide(slide, src, isPriorityImage = false) {
+    const img = document.createElement('img');
+    
+    // Priority images get high fetch priority and eager loading
+    if (isPriorityImage) {
+        img.fetchPriority = 'high';
+        img.loading = 'eager';
+    } else {
+        img.loading = 'lazy';
+    }
+    img.decoding = 'async';
+    
+    img.onload = function() {
+        this.classList.add('loaded');
+        if (isPriorityImage) {
+            hideLoadingOverlay();
+        }
+    };
+    
+    img.onerror = function() {
+        this.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><text x="12" y="12" text-anchor="middle" fill="white">Error</text></svg>';
+        if (isPriorityImage) {
+            hideLoadingOverlay();
+        }
+    };
+    
+    // Use thumbnail endpoint if thumbnail caching is enabled
+    if (state.optimizations.thumbnail_cache) {
+        // Convert /image?path= to /thumbnail?path=
+        const path = extractPath(src);
+        const thumbnailUrl = `/thumbnail?path=${encodeURIComponent(path)}`;
+        console.log(`[Thumbnail] Loading: ${thumbnailUrl.substring(0, 100)}...`);
+        img.src = thumbnailUrl;
+    } else {
+        img.src = src;
+    }
+    slide.appendChild(img);
+}
+
+/**
+ * Load GIF for a slide
+ * GIFs are loaded as static images (no WebM conversion)
+ * @param {HTMLElement} slide - The slide element
+ * @param {string} src - The image source URL
+ * @param {boolean} isPriorityImage - If true, hide loading overlay when loaded
+ */
+function loadGifForSlide(slide, src, isPriorityImage = false) {
+    // Load GIF as static image
+    loadStaticImageForSlide(slide, src, isPriorityImage);
+}
+
+/**
+ * Load video for a slide
+ * Uses video poster if video_poster_cache is enabled
+ * 
+ * Loading strategy:
+ * 1. Show blurred poster immediately (if enabled)
+ * 2. Load video with preload='metadata' for faster initial load
+ * 3. When video is ready, crossfade from poster to video
+ * 
+ * @param {HTMLElement} slide - The slide element
+ * @param {string} src - The video source URL
+ * @param {boolean} isConvertedGif - True if this is a GIF converted to WebM
+ * @param {boolean} isPriorityImage - If true, hide loading overlay when loaded
+ */
+function loadVideoForSlide(slide, src, isConvertedGif = false, isPriorityImage = false) {
+    const video = document.createElement('video');
+    video.playsInline = true;
+    video.muted = true;
+    video.loop = !state.optimizations.auto_advance;  // Only loop if auto-advance is disabled
+    video.preload = 'metadata';  // Changed from 'auto' - faster initial load
+    
+    if (isConvertedGif) {
+        video.dataset.originalGif = 'true';
+    }
+    
+    // Add ended event listener for auto-advance
+    if (state.optimizations.auto_advance) {
+        video.addEventListener('ended', () => {
+            // Only advance if this is still the current slide and not at the end
+            const slideIndex = parseInt(slide.dataset.index);
+            if (slideIndex === state.currentIndex && slideIndex < state.images.length - 1) {
+                scrollToImage(slideIndex + 1);
+            }
+        });
+    }
+    
+    let hasLoaded = false;
+    let loadTimeout = null;
+    
+    // Load poster image first if video poster cache is enabled
+    if (state.optimizations.video_poster_cache && !isConvertedGif) {
+        const path = extractPath(src);
+        const posterUrl = `/video-poster?path=${encodeURIComponent(path)}`;
+        
+        // Create poster image element
+        const poster = document.createElement('img');
+        poster.className = 'video-poster';
+        
+        // Priority images get high fetch priority and eager loading
+        if (isPriorityImage) {
+            poster.fetchPriority = 'high';
+            poster.loading = 'eager';
+        } else {
+            poster.loading = 'lazy';
+        }
+        
+        poster.onload = function() {
+            // Add loaded class to trigger unblur animation
+            this.classList.add('loaded');
+            // Hide loading overlay when poster loads (priority image only)
+            if (isPriorityImage) {
+                hideLoadingOverlay();
+            }
+            console.log(`[Video] Poster loaded for: ${path.substring(0, 50)}...`);
+        };
+        
+        poster.onerror = function() {
+            // Poster failed to load, remove it and log
+            console.warn(`[Video] Poster failed to load for: ${path.substring(0, 50)}...`);
+            this.remove();
+        };
+        
+        poster.src = posterUrl;
+        slide.appendChild(poster);
+    }
+    
+    // Set up video load timeout (30 seconds - slow networks need more time)
+    loadTimeout = setTimeout(() => {
+        if (!hasLoaded) {
+            console.log(`[Video] Still loading after 30s: ${src.substring(0, 50)}...`);
+            // Don't show error, video might still load on slow networks
+        }
+    }, 30000);
+    
+    video.onloadedmetadata = function() {
+        // Now load the actual video data
+        this.preload = 'auto';
+    };
+    
+    video.onloadeddata = function() {
+        hasLoaded = true;
+        if (loadTimeout) clearTimeout(loadTimeout);
+        
+        this.classList.add('loaded');
+        console.log(`[Video] Data loaded for: ${src.substring(0, 50)}...`);
+        
+        // Hide loading overlay when video loads (priority image only, if no poster)
+        if (isPriorityImage && !state.optimizations.video_poster_cache) {
+            hideLoadingOverlay();
+        }
+        
+        // Hide poster with fade (use class for CSS transition)
+        const poster = slide.querySelector('.video-poster');
+        if (poster) {
+            poster.classList.add('hidden');
+            // Remove poster after transition completes
+            setTimeout(() => poster.remove(), 300);
+        }
+        
+        // Try to play the video
+        this.play().catch((err) => {
+            console.log(`[Video] Autoplay prevented, will retry on intersection: ${err.message}`);
+        });
+    };
+    
+    video.onerror = function(e) {
+        if (loadTimeout) clearTimeout(loadTimeout);
+        
+        // Hide loading overlay on error too
+        if (isPriorityImage) {
+            hideLoadingOverlay();
+        }
+        
+        // Get error details
+        let errorMsg = 'Video unavailable';
+        if (this.error) {
+            switch (this.error.code) {
+                case MediaError.MEDIA_ERR_ABORTED:
+                    errorMsg = 'Video loading aborted';
+                    break;
+                case MediaError.MEDIA_ERR_NETWORK:
+                    errorMsg = 'Network error loading video';
+                    break;
+                case MediaError.MEDIA_ERR_DECODE:
+                    errorMsg = 'Video decode error';
+                    break;
+                case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+                    errorMsg = 'Video format not supported';
+                    break;
+            }
+        }
+        
+        // Only show error if video never loaded (not a playback error)
+        if (!hasLoaded) {
+            console.error(`[Video] ${errorMsg}: ${src.substring(0, 50)}...`);
+            
+            // Remove any existing error message
+            const existingError = slide.querySelector('.video-error');
+            if (existingError) existingError.remove();
+            
+            // Show error placeholder
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'video-error';
+            errorDiv.textContent = errorMsg;
+            slide.appendChild(errorDiv);
+            
+            // Remove poster if video failed
+            const poster = slide.querySelector('.video-poster');
+            if (poster) poster.remove();
+        }
+    };
+    
+    video.src = src;
+    slide.appendChild(video);
+    
+    // Add video controls
+    addVideoControls(slide, video);
+    
+    // Note: Tap to toggle mute is handled by setupDoubleTapToLike() in the slide click handler
+}
+
+// ============ Observers ============
+
+/**
+ * Set up IntersectionObservers
+ */
+function setupObservers() {
+    // Main observer for lazy loading - use higher threshold for more accurate current slide tracking
+    const options = {
+        root: scrollContainer,
+        rootMargin: '100px 0px',
+        threshold: [0, 0.5] // Trigger at 0% and 50% visibility
+    };
+    
+    state.observer = new IntersectionObserver((entries) => {
+        // Find the most visible slide for currentIndex tracking
+        let mostVisibleEntry = null;
+        let highestRatio = 0;
+        
+        entries.forEach(entry => {
+            const slide = entry.target;
+            const index = parseInt(slide.dataset.index);
+            
+            // Load image if not loaded and partially visible
+            if (entry.isIntersecting && !slide.querySelector('img, video')) {
+                loadImageForSlide(slide);
+            }
+            
+            // Track the most visible slide (highest intersection ratio)
+            if (entry.intersectionRatio > highestRatio) {
+                highestRatio = entry.intersectionRatio;
+                mostVisibleEntry = entry;
+            }
+        });
+        
+        // Update currentIndex only for the most visible slide (50%+ threshold)
+        if (mostVisibleEntry && mostVisibleEntry.intersectionRatio >= 0.5) {
+            const index = parseInt(mostVisibleEntry.target.dataset.index);
+            if (index !== state.currentIndex) {
+                // Mute the previous video when scrolling away
+                const prevSlide = document.querySelector(`.image-slide[data-index="${state.currentIndex}"]`);
+                if (prevSlide) {
+                    const prevSrc = prevSlide.dataset.src;
+                    if (isVideoUrl(prevSrc)) {
+                        const prevVideo = prevSlide.querySelector('video');
+                        if (prevVideo) {
+                            prevVideo.muted = true;
+                        }
+                    }
+                }
+                
+                state.currentIndex = index;
+                updateUI();
+                // Preload adjacent images when current index changes
+                const preloadCount = getPreloadCount();
+                sequentialPreload(index, 1, preloadCount, true);  // Ahead
+                sequentialPreload(index, 1, preloadCount, false); // Behind
+                
+                // Start auto-advance timer for photos
+                if (state.optimizations.auto_advance) {
+                    startAutoAdvanceTimer();
+                }
+            }
+        }
+    }, options);
+    
+    // GIF observer for freeze/unfreeze
+    const gifOptions = {
+        root: scrollContainer,
+        rootMargin: '50px 0px',
+        threshold: 0
+    };
+    
+    state.gifObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            const slide = entry.target;
+            const src = slide.dataset.src;
+            
+            // Handle GIFs
+            if (isGifUrl(src)) {
+                const img = slide.querySelector('img');
+                const video = slide.querySelector('video[data-original-gif="true"]');
+                
+                if (entry.isIntersecting) {
+                    if (img) unfreezeGif(img);
+                    if (video) unfreezeGif(video);
+                } else {
+                    if (img) freezeGif(img);
+                    if (video) freezeGif(video);
+                }
+            }
+            
+            // Handle videos - play when visible, pause when not
+            if (isVideoUrl(src)) {
+                const video = slide.querySelector('video');
+                if (video) {
+                    if (entry.isIntersecting) {
+                        video.play().catch(() => {
+                            // Autoplay was prevented
+                        });
+                    } else {
+                        video.pause();
+                        // Auto-mute when scrolling away from video
+                        video.muted = true;
+                    }
+                }
+            }
+        });
+    }, gifOptions);
+}
+
+/**
+ * Observe all slides
+ */
+function observeSlides() {
+    document.querySelectorAll('.image-slide').forEach(slide => {
+        state.observer?.observe(slide);
+        state.gifObserver?.observe(slide);
+    });
+}
+
+// ============ Priority Loading ============
+
+/**
+ * Prioritize loading the first image
+ * Preloads images both ahead AND behind for smoother scrolling
+ */
+function prioritizeFirstImage(priorityIndex = 0) {
+    const slide = document.querySelector(`.image-slide[data-index="${priorityIndex}"]`);
+    if (!slide) {
+        // No slide found, hide spinner
+        hideLoadingOverlay();
+        return;
+    }
+    
+    // Check if content already exists
+    const existingContent = slide.querySelector('img, video');
+    if (existingContent) {
+        // Content already loaded, hide spinner
+        hideLoadingOverlay();
+    } else {
+        // Load the priority image immediately
+        loadImageForSlide(slide, true);  // true = isPriorityImage
+    }
+    
+    // Preload images both ahead and behind
+    // This creates a "window" of cached images around the current position
+    const preloadCount = getPreloadCount();
+    sequentialPreload(priorityIndex, 1, preloadCount, true);  // Ahead
+    sequentialPreload(priorityIndex, 1, preloadCount, false); // Behind
+}
+
+/**
+ * Sequentially preload images in a given direction
+ * @param centerIndex - The current image index
+ * @param current - Current offset from center (starts at 1)
+ * @param max - Maximum number of images to preload in each direction
+ * @param ahead - True to preload ahead, false to preload behind
+ */
+function sequentialPreload(centerIndex, current, max, ahead = true) {
+    if (current > max) return;
+    
+    // Calculate index based on direction
+    const preloadIndex = ahead ? centerIndex + current : centerIndex - current;
+    
+    // Skip if index is out of bounds
+    if (preloadIndex < 0 || preloadIndex >= state.images.length) {
+        // Continue to next iteration
+        setTimeout(() => {
+            sequentialPreload(centerIndex, current + 1, max, ahead);
+        }, 150);
+        return;
+    }
+    
+    const slide = document.querySelector(`.image-slide[data-index="${preloadIndex}"]`);
+    
+    if (slide && !slide.querySelector('img, video')) {
+        loadImageForSlide(slide);
+    }
+    
+    setTimeout(() => {
+        sequentialPreload(centerIndex, current + 1, max, ahead);
+    }, 150);
+}
+
+// ============ UI Updates ============
+
+/**
+ * Hide the loading overlay with fade animation
+ */
+function hideLoadingOverlay() {
+    if (loadingOverlay) {
+        loadingOverlay.classList.add('hidden');
+    }
+}
+
+/**
+ * Show the loading overlay - for mode changes that reload images
+ */
+function showLoadingOverlay() {
+    if (loadingOverlay) {
+        // Reset state: remove hidden class and ensure visibility
+        loadingOverlay.classList.remove('hidden');
+        loadingOverlay.style.visibility = 'visible';
+        loadingOverlay.style.display = 'flex';
+        // Trigger reflow for animation
+        loadingOverlay.offsetHeight;
+        loadingOverlay.classList.remove('hidden');
+    }
+}
+
+/**
+ * Update UI based on current state
+ */
+function updateUI() {
+    updateCounter();
+    updateFavoriteButton();
+    updateTrashButton();
+    updateFilePathDisplay();
+}
+
+/**
+ * Update the image counter
+ */
+function updateCounter() {
+    const counter = document.getElementById('counter');
+    if (counter) {
+        counter.textContent = `${state.currentIndex + 1} / ${state.images.length}`;
+    }
+}
+
+/**
+ * Update favorite button state
+ */
+function updateFavoriteButton() {
+    if (!heartBtn) return;
+    
+    const currentSrc = state.images[state.currentIndex];
+    if (!currentSrc) return;
+    
+    const path = extractPath(currentSrc);
+    const isFavorite = state.favorites.has(path);
+    
+    // Toggle CSS class for styling
+    heartBtn.classList.toggle('liked', isFavorite);
+}
+
+/**
+ * Update trash button state
+ */
+function updateTrashButton() {
+    if (!trashBtn) return;
+    
+    const currentSrc = state.images[state.currentIndex];
+    if (!currentSrc) return;
+    
+    const path = extractPath(currentSrc);
+    const isTrashed = state.trash.has(path);
+    
+    // Toggle CSS class for styling
+    trashBtn.classList.toggle('trashed', isTrashed);
+}
+
+/**
+ * Update filter badge count
+ */
+function updateFilterBadge() {
+    if (!filterBadge) return;
+    
+    const count = state.favorites.size;
+    filterBadge.textContent = count;
+    filterBadge.style.display = count > 0 ? 'flex' : 'none';
+}
+
+/**
+ * Update shuffle button state
+ */
+function updateShuffleButton() {
+    if (!shuffleBtn) return;
+    shuffleBtn.classList.toggle('active', state.shuffleEnabled);
+}
+
+/**
+ * Update file path display at bottom left
+ */
+function updateFilePathDisplay() {
+    if (!filePathDisplay) return;
+    
+    const currentSrc = state.images[state.currentIndex];
+    if (!currentSrc) {
+        filePathDisplay.innerHTML = '';
+        return;
+    }
+    
+    const path = extractPath(currentSrc);
+    const filename = path.split('/').pop().split('\\').pop();
+    const folderPath = path.substring(0, path.lastIndexOf('/')) || path.substring(0, path.lastIndexOf('\\'));
+    const folderName = folderPath.split('/').pop().split('\\').pop();
+    
+    filePathDisplay.innerHTML = `
+        <div class="file-path-folder" title="${folderPath}">${folderName}</div>
+        <div class="file-path-filename">${filename}</div>
+    `;
+    
+    // Make folder clickable
+    const folderEl = filePathDisplay.querySelector('.file-path-folder');
+    if (folderEl) {
+        folderEl.addEventListener('click', () => {
+            if (folderPath) {
+                enterFolderMode(folderPath);
+            }
+        });
+    }
+}
+
+// ============ Actions ============
+
+/**
+ * Add favorite for current image (only adds, doesn't remove)
+ * Used for double-tap gesture
+ */
+async function addFavorite() {
+    const currentSrc = state.images[state.currentIndex];
+    if (!currentSrc) return;
+    
+    const path = extractPath(currentSrc);
+    
+    // Check if image is in trash - prevent favoriting
+    if (state.trash.has(path)) {
+        showFavoriteBlockedFeedback();
+        return;
+    }
+    
+    // Only add if not already favorited
+    if (state.favorites.has(path)) return;
+    
+    try {
+        await API.addFavorite(currentSrc);
+        state.favorites.add(path);
+        
+        updateFavoriteButton();
+        updateFilterBadge();
+        
+        // Trigger animation
+        if (heartBtn) {
+            heartBtn.classList.remove('animate-press');
+            void heartBtn.offsetWidth; // Force reflow
+            heartBtn.classList.add('animate-press');
+        }
+        
+    } catch (error) {
+        console.error('Failed to add favorite:', error);
+    }
+}
+
+/**
+ * Toggle favorite for current image (used by heart button)
+ */
+async function toggleFavorite() {
+    const currentSrc = state.images[state.currentIndex];
+    if (!currentSrc) return;
+    
+    const path = extractPath(currentSrc);
+    
+    // Check if image is in trash - prevent favoriting
+    if (state.trash.has(path)) {
+        showFavoriteBlockedFeedback();
+        return;
+    }
+    
+    try {
+        if (state.favorites.has(path)) {
+            await API.removeFavorite(currentSrc);
+            state.favorites.delete(path);
+        } else {
+            await API.addFavorite(currentSrc);
+            state.favorites.add(path);
+        }
+        
+        updateFavoriteButton();
+        updateFilterBadge();
+        
+        // Trigger animation
+        if (heartBtn) {
+            heartBtn.classList.remove('animate-press');
+            void heartBtn.offsetWidth; // Force reflow
+            heartBtn.classList.add('animate-press');
+        }
+        
+    } catch (error) {
+        console.error('Failed to toggle favorite:', error);
+    }
+}
+
+/**
+ * Toggle trash for current image
+ */
+async function toggleTrash() {
+    const currentSrc = state.images[state.currentIndex];
+    if (!currentSrc) return;
+    
+    const path = extractPath(currentSrc);
+    
+    try {
+        if (state.trash.has(path)) {
+            await API.removeFromTrash(currentSrc);
+            state.trash.delete(path);
+            showTrashIconFeedback(false); // Show "unmarked" feedback
+        } else {
+            await API.addToTrash(currentSrc);
+            state.trash.add(path);
+            // Remove from favorites if present (mutual exclusion)
+            state.favorites.delete(path);
+            showTrashIconFeedback(true); // Show "marked for deletion" feedback
+        }
+        
+        updateTrashButton();
+        updateFavoriteButton();
+        updateFilterBadge();
+        
+        // Trigger animation
+        if (trashBtn) {
+            trashBtn.classList.remove('animate-press');
+            void trashBtn.offsetWidth; // Force reflow
+            trashBtn.classList.add('animate-press');
+        }
+        
+    } catch (error) {
+        console.error('Failed to toggle trash:', error);
+    }
+}
+
+/**
+ * Show trash icon feedback in center of screen
+ */
+function showTrashIconFeedback(isMarked) {
+    // Remove any existing feedback
+    const existing = document.querySelector('.trash-icon-feedback');
+    if (existing) existing.remove();
+    
+    // Create feedback element
+    const feedback = document.createElement('div');
+    feedback.className = 'trash-icon-feedback';
+    feedback.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+            ${isMarked ? '<line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>' : ''}
+        </svg>
+        <span>${isMarked ? 'Marked for Deletion' : 'Removed from Trash'}</span>
+    `;
+    
+    document.body.appendChild(feedback);
+    
+    // Trigger animation
+    requestAnimationFrame(() => {
+        feedback.classList.add('visible');
+    });
+    
+    // Remove after delay
+    setTimeout(() => {
+        feedback.classList.remove('visible');
+        setTimeout(() => feedback.remove(), 300);
+    }, 800);
+}
+
+/**
+ * Show feedback when trying to favorite a trashed image
+ */
+function showFavoriteBlockedFeedback() {
+    // Remove any existing feedback
+    const existing = document.querySelector('.trash-icon-feedback');
+    if (existing) existing.remove();
+    
+    // Create feedback element
+    const feedback = document.createElement('div');
+    feedback.className = 'trash-icon-feedback';
+    feedback.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+        </svg>
+        <span>Cannot favorite - marked for deletion</span>
+    `;
+    
+    document.body.appendChild(feedback);
+    
+    // Trigger animation
+    requestAnimationFrame(() => {
+        feedback.classList.add('visible');
+    });
+    
+    // Remove after delay
+    setTimeout(() => {
+        feedback.classList.remove('visible');
+        setTimeout(() => feedback.remove(), 300);
+    }, 1500);
+}
+
+/**
+ * Toggle favorites mode
+ */
+async function toggleFavoritesMode() {
+    // Trigger animation
+    if (filterBtn) {
+        filterBtn.classList.remove('animate-press');
+        void filterBtn.offsetWidth; // Force reflow
+        filterBtn.classList.add('animate-press');
+    }
+    
+    if (state.showingFavoritesOnly) {
+        exitFavoritesMode();
+        state.currentTopNavFolder = 'all';
+    } else {
+        await enterFavoritesMode();
+        state.currentTopNavFolder = 'likes';
+    }
+    
+    // Update filter button active state
+    if (filterBtn) {
+        filterBtn.classList.toggle('active', state.showingFavoritesOnly);
+    }
+    
+    updateTopNavActiveState();
+}
+
+/**
+ * Enter favorites mode
+ */
+async function enterFavoritesMode() {
+    state.savedIndex = state.currentIndex;
+    state.allImages = [...state.images];
+    state.unshuffledImages = []; // Clear shuffle backup for new context
+    state.showingFavoritesOnly = true;
+    
+    try {
+        state.images = await API.getFavoriteImages(state.currentSortOrder);
+        
+        // If shuffle is enabled, shuffle the favorites
+        if (state.shuffleEnabled && state.images.length > 0) {
+            state.unshuffledImages = [...state.images];
+            shuffleArray(state.images);
+        }
+        
+        // Reset current index for favorites view
+        state.currentIndex = 0;
+        
+        if (state.images.length > 0) {
+            showLoadingOverlay();
+            buildSlides();
+            prioritizeFirstImage();
+            updateUI(); // Update UI to show correct image info
+            updateTopNavActiveState(); // Update top nav to show "Likes"
+            // Scroll to first image
+            scrollToImage(0);
+        } else {
+            if (noFavorites) noFavorites.style.display = 'flex';
+        }
+        
+    } catch (error) {
+        console.error('Failed to enter favorites mode:', error);
+    }
+}
+
+/**
+ * Exit favorites mode
+ */
+async function exitFavoritesMode() {
+    state.showingFavoritesOnly = false;
+    state.unshuffledImages = []; // Clear shuffle backup
+    state.images = [...state.allImages];
+    state.allImages = [];
+    
+    // If shuffle is enabled, shuffle the restored images
+    if (state.shuffleEnabled && state.images.length > 0) {
+        state.unshuffledImages = [...state.images];
+        shuffleArray(state.images);
+    }
+    
+    // Restore to saved index
+    state.currentIndex = state.savedIndex;
+    
+    if (noFavorites) noFavorites.style.display = 'none';
+    
+    showLoadingOverlay();
+    buildSlides();
+    prioritizeFirstImage(state.savedIndex);
+    updateUI(); // Update UI to show correct image info
+    scrollToImage(state.savedIndex, 'instant'); // Instant scroll - already showing loading overlay
+}
+
+/**
+ * Toggle shuffle mode
+ * Shuffles/unshuffles the current images in place
+ */
+async function toggleShuffle() {
+    state.shuffleEnabled = !state.shuffleEnabled;
+    
+    try {
+        await API.updateSettings({ shuffle: state.shuffleEnabled });
+        updateShuffleButton();
+        
+        // Trigger animation
+        if (shuffleBtn) {
+            shuffleBtn.classList.remove('animate-press');
+            void shuffleBtn.offsetWidth; // Force reflow
+            shuffleBtn.classList.add('animate-press');
+        }
+        
+        if (state.shuffleEnabled) {
+            // Save current order before shuffling
+            state.unshuffledImages = [...state.images];
+            // Shuffle in place
+            shuffleArray(state.images);
+        } else {
+            // Restore unshuffled order
+            if (state.unshuffledImages.length > 0) {
+                state.images = [...state.unshuffledImages];
+                state.unshuffledImages = [];
+            }
+        }
+        
+        // Reset to first image and rebuild slides
+        state.currentIndex = 0;
+        showLoadingOverlay();
+        buildSlides();
+        prioritizeFirstImage();
+        updateUI(); // Update UI to show correct image info
+        
+    } catch (error) {
+        console.error('Failed to toggle shuffle:', error);
+    }
+}
+
+/**
+ * Fisher-Yates shuffle algorithm
+ * Shuffles array in place
+ */
+function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+}
+
+// ============ Folder Mode ============
+
+/**
+ * Enter folder mode
+ */
+async function enterFolderMode(folderPath) {
+    state.savedIndex = state.currentIndex;
+    state.savedImages = [...state.images];
+    state.unshuffledImages = []; // Clear shuffle backup for new context
+    state.showingFolderOnly = true;
+    state.currentFolderFilter = folderPath;
+    state.currentTopNavFolder = folderPath;
+    
+    try {
+        state.images = await API.getImagesByFolder(folderPath, state.currentSortOrder);
+        
+        // If shuffle is enabled, shuffle the folder images
+        if (state.shuffleEnabled && state.images.length > 0) {
+            state.unshuffledImages = [...state.images];
+            shuffleArray(state.images);
+        }
+        
+        // Reset current index for new folder
+        state.currentIndex = 0;
+        
+        showLoadingOverlay();
+        buildSlides();
+        prioritizeFirstImage();
+        updateUI(); // Update UI to show correct image info
+        updateTopNavActiveState(); // Update top nav to show active folder
+        
+    } catch (error) {
+        console.error('Failed to enter folder mode:', error);
+    }
+}
+
+/**
+ * Exit folder mode
+ */
+function exitFolderMode() {
+    state.showingFolderOnly = false;
+    state.currentFolderFilter = null;
+    state.currentTopNavFolder = 'all';
+    state.unshuffledImages = []; // Clear shuffle backup
+    state.images = [...state.savedImages];
+    state.savedImages = [];
+    
+    // If shuffle is enabled, shuffle the restored images
+    if (state.shuffleEnabled && state.images.length > 0) {
+        state.unshuffledImages = [...state.images];
+        shuffleArray(state.images);
+    }
+    
+    // Restore to saved index
+    state.currentIndex = state.savedIndex;
+    
+    showLoadingOverlay();
+    buildSlides();
+    prioritizeFirstImage(state.savedIndex);
+    updateUI(); // Update UI to show correct image info
+    updateTopNavActiveState(); // Update top nav to show "All"
+    scrollToImage(state.savedIndex, 'instant'); // Instant scroll - already showing loading overlay
+}
+
+// ============ Trash Mode ============
+
+/**
+ * View trash
+ */
+async function viewTrash() {
+    state.savedIndex = state.currentIndex;
+    state.savedImages = [...state.images]; // Backup current images
+    state.unshuffledImages = []; // Clear shuffle backup
+    state.showingTrashOnly = true;
+    
+    // Close settings modal if open
+    if (settingsModal) settingsModal.style.display = 'none';
+    if (trashModal) trashModal.style.display = 'none';
+    
+    try {
+        state.images = await API.getTrashImages(state.currentSortOrder);
+        
+        // If shuffle is enabled, shuffle the trash images
+        if (state.shuffleEnabled && state.images.length > 0) {
+            state.unshuffledImages = [...state.images];
+            shuffleArray(state.images);
+        }
+        
+        // Reset current index for trash view
+        state.currentIndex = 0;
+        
+        if (state.images.length > 0) {
+            showLoadingOverlay();
+            buildSlides();
+            prioritizeFirstImage();
+            updateUI(); // Update UI to show correct image info
+            updateTopNavActiveState(); // Update top nav to show "Trash"
+        } else {
+            // Show empty trash placeholder
+            hideLoadingOverlay();
+            if (scrollContainer) scrollContainer.innerHTML = '';
+            if (noTrash) noTrash.style.display = 'flex';
+            if (filePathDisplay) filePathDisplay.style.display = 'none'; // Hide file path display
+            updateTopNavActiveState(); // Update top nav to show "Trash"
+        }
+        
+    } catch (error) {
+        console.error('Failed to view trash:', error);
+    }
+}
+
+/**
+ * Exit trash mode
+ */
+async function exitTrashMode() {
+    state.showingTrashOnly = false;
+    state.unshuffledImages = []; // Clear shuffle backup
+    
+    // Restore backed up images, or reload if backup is empty
+    if (state.savedImages.length > 0) {
+        state.images = [...state.savedImages];
+        state.savedImages = [];
+    } else {
+        // Reload images from API if no backup exists
+        try {
+            state.images = await API.getImages(state.currentSortOrder);
+        } catch (error) {
+            console.error('Failed to reload images:', error);
+        }
+    }
+    
+    // If shuffle is enabled, shuffle the restored images
+    if (state.shuffleEnabled && state.images.length > 0) {
+        state.unshuffledImages = [...state.images];
+        shuffleArray(state.images);
+    }
+    
+    // Restore to saved index
+    state.currentIndex = state.savedIndex;
+    
+    if (noTrash) noTrash.style.display = 'none';
+    if (filePathDisplay) filePathDisplay.style.display = ''; // Show file path display again
+    
+    showLoadingOverlay();
+    buildSlides();
+    prioritizeFirstImage(state.savedIndex);
+    updateUI(); // Update UI to show correct image info
+    updateTopNavActiveState(); // Update top nav to show "All"
+    scrollToImage(state.savedIndex, 'instant'); // Instant scroll - already showing loading overlay
+}
+
+/**
+ * Confirm empty trash
+ */
+function confirmEmptyTrash() {
+    if (deleteConfirmModal) {
+        deleteConfirmMessage.textContent = `Delete ${state.trash.size} images permanently?`;
+        deleteConfirmModal.style.display = 'flex';
+    }
+}
+
+/**
+ * Execute empty trash
+ */
+async function executeEmptyTrash() {
+    try {
+        await API.emptyTrash();
+        state.trash.clear();
+        hideDeleteConfirm();
+        hideTrashModal();
+        exitTrashMode();
+        
+    } catch (error) {
+        console.error('Failed to empty trash:', error);
+    }
+}
+
+// ============ Modals ============
+
+function showInfoModal() {
+    if (!infoModal || !infoModalBody) return;
+    
+    const currentSrc = state.images[state.currentIndex];
+    if (!currentSrc) {
+        infoModalBody.innerHTML = '<p>No image selected</p>';
+        infoModal.style.display = 'flex';
+        return;
+    }
+    
+    const path = extractPath(currentSrc);
+    const filename = path.split('/').pop().split('\\').pop();
+    const folder = path.substring(0, path.lastIndexOf('/')) || path.substring(0, path.lastIndexOf('\\'));
+    
+    // Check if favorited or trashed
+    const isFavorite = state.favorites.has(path);
+    const isTrashed = state.trash.has(path);
+    
+    // Show loading state
+    infoModalBody.innerHTML = '<div class="info-loading">Loading metadata...</div>';
+    infoModal.style.display = 'flex';
+    
+    // Fetch EXIF data from API
+    API.getImageMetadata(path).then(metadata => {
+        // Extract EXIF data if available
+        const exif = metadata.exif || {};
+        const camera = exif.Model || exif.Make ? [exif.Make, exif.Model].filter(Boolean).join(' ') : null;
+        const photoDate = exif.DateTimeOriginal || exif.DateTime || null;
+        
+        infoModalBody.innerHTML = `
+            <div class="info-row">
+                <span class="info-label">Filename</span>
+                <span class="info-value">${filename}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Folder</span>
+                <span class="info-value">${folder}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Position</span>
+                <span class="info-value">${state.currentIndex + 1} of ${state.images.length}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Status</span>
+                <span class="info-value">
+                    ${isFavorite ? '❤️ Favorited' : isTrashed ? '🗑️ Marked for deletion' : '—'}
+                </span>
+            </div>
+            ${metadata.created ? `
+            <div class="info-row">
+                <span class="info-label">Date Created</span>
+                <span class="info-value">${metadata.created}</span>
+            </div>` : ''}
+            ${metadata.modified ? `
+            <div class="info-row">
+                <span class="info-label">Modified</span>
+                <span class="info-value">${metadata.modified}</span>
+            </div>` : ''}
+            ${camera ? `
+            <div class="info-row">
+                <span class="info-label">Camera</span>
+                <span class="info-value">${camera}</span>
+            </div>` : ''}
+            ${photoDate ? `
+            <div class="info-row">
+                <span class="info-label">Photo Date</span>
+                <span class="info-value">${photoDate}</span>
+            </div>` : ''}
+            ${metadata.size_formatted ? `
+            <div class="info-row">
+                <span class="info-label">File Size</span>
+                <span class="info-value">${metadata.size_formatted}</span>
+            </div>` : ''}
+            ${metadata.resolution ? `
+            <div class="info-row">
+                <span class="info-label">Dimensions</span>
+                <span class="info-value">${metadata.resolution}</span>
+            </div>` : ''}
+        `;
+    }).catch(error => {
+        console.error('Failed to load metadata:', error);
+        infoModalBody.innerHTML = `
+            <div class="info-row">
+                <span class="info-label">Filename</span>
+                <span class="info-value">${filename}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Folder</span>
+                <span class="info-value">${folder}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Position</span>
+                <span class="info-value">${state.currentIndex + 1} of ${state.images.length}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Status</span>
+                <span class="info-value">
+                    ${isFavorite ? '❤️ Favorited' : isTrashed ? '🗑️ Marked for deletion' : '—'}
+                </span>
+            </div>
+        `;
+    });
+}
+
+function hideInfoModal() {
+    if (infoModal) infoModal.style.display = 'none';
+}
+
+function showSettingsModal() {
+    if (settingsModal) {
+        settingsModal.style.display = 'flex';
+        loadSettingsModalData();
+    }
+}
+
+/**
+ * Load data into settings modal
+ */
+async function loadSettingsModalData() {
+    try {
+        // Load folders
+        const folders = await API.getFolders();
+        renderSettingsFolderList(folders);
+        
+        // Load stats
+        const counts = await API.getImageCount();
+        const folderCountEl = document.getElementById('settingsFolderCount');
+        const imageCountEl = document.getElementById('settingsImageCount');
+        if (folderCountEl) folderCountEl.textContent = folders.length;
+        if (imageCountEl) imageCountEl.textContent = counts.imageCount;
+        
+        // Load cache info
+        const cacheInfo = await API.getCacheInfo();
+        const cacheSizeEl = document.getElementById('cacheSizeDisplay');
+        if (cacheSizeEl) cacheSizeEl.textContent = cacheInfo.size_formatted || '0 B';
+        
+        // Load optimization settings and update toggle states
+        const settings = await API.getSettings();
+        const thumbnailToggle = document.getElementById('toggleThumbnailCache');
+        const videoPosterToggle = document.getElementById('toggleVideoPoster');
+        const fillScreenToggle = document.getElementById('toggleFillScreen');
+        const autoAdvanceToggle = document.getElementById('toggleAutoAdvance');
+        const autoAdvanceDelaySlider = document.getElementById('autoAdvanceDelaySlider');
+        const autoAdvanceDelayValue = document.getElementById('autoAdvanceDelayValue');
+        
+        if (thumbnailToggle) thumbnailToggle.checked = settings.optimizations?.thumbnail_cache || false;
+        if (videoPosterToggle) videoPosterToggle.checked = settings.optimizations?.video_poster_cache || false;
+        if (fillScreenToggle) fillScreenToggle.checked = settings.optimizations?.fill_screen || false;
+        if (autoAdvanceToggle) autoAdvanceToggle.checked = settings.optimizations?.auto_advance || false;
+        if (autoAdvanceDelaySlider) autoAdvanceDelaySlider.value = settings.optimizations?.auto_advance_delay || 3;
+        if (autoAdvanceDelayValue) autoAdvanceDelayValue.textContent = settings.optimizations?.auto_advance_delay || 3;
+        
+        // Setup cache settings toggle
+        const cacheHeader = document.getElementById('cacheSettingsHeader');
+        const cacheContent = document.getElementById('cacheSettingsContent');
+        if (cacheHeader && cacheContent) {
+            cacheHeader.onclick = () => {
+                const isVisible = cacheContent.style.display !== 'none';
+                cacheContent.style.display = isVisible ? 'none' : 'block';
+                cacheHeader.classList.toggle('expanded', !isVisible);
+            };
+        }
+        
+        // Setup display settings toggle
+        const displayHeader = document.getElementById('displaySettingsHeader');
+        const displayContent = document.getElementById('displaySettingsContent');
+        if (displayHeader && displayContent) {
+            displayHeader.onclick = () => {
+                const isVisible = displayContent.style.display !== 'none';
+                displayContent.style.display = isVisible ? 'none' : 'block';
+                displayHeader.classList.toggle('expanded', !isVisible);
+            };
+        }
+        
+        // Setup add folder form
+        const addFolderForm = document.getElementById('settingsAddFolderForm');
+        if (addFolderForm) {
+            addFolderForm.onsubmit = async (e) => {
+                e.preventDefault();
+                const input = document.getElementById('settingsFolderPath');
+                if (input && input.value.trim()) {
+                    try {
+                        await API.addFolder(input.value.trim());
+                        input.value = '';
+                        loadSettingsModalData();
+                    } catch (error) {
+                        console.error('Failed to add folder:', error);
+                    }
+                }
+            };
+        }
+        
+        // Setup clear cache button
+        const clearCacheBtn = document.getElementById('clearCacheBtn');
+        if (clearCacheBtn) {
+            clearCacheBtn.onclick = async () => {
+                // Show confirmation dialog
+                if (!confirm('Are you sure you want to clear all cached thumbnails? This will free up disk space but images will need to be re-cached on next load.')) {
+                    return;
+                }
+                try {
+                    await API.clearCache();
+                    loadSettingsModalData();
+                } catch (error) {
+                    console.error('Failed to clear cache:', error);
+                }
+            };
+        }
+        
+        // Setup trash button
+        const trashBtn = document.getElementById('settingsTrashBtn');
+        if (trashBtn) {
+            trashBtn.onclick = showTrashModal;
+        }
+        
+        // Update trash badge
+        const trashBadge = document.getElementById('settingsTrashBadge');
+        if (trashBadge) {
+            trashBadge.textContent = state.trash.size;
+            trashBadge.style.display = state.trash.size > 0 ? 'inline' : 'none';
+        }
+        
+    } catch (error) {
+        console.error('Failed to load settings data:', error);
+    }
+}
+
+/**
+ * Render folder list in settings modal
+ */
+function renderSettingsFolderList(folders) {
+    const listEl = document.getElementById('settingsFolderList');
+    if (!listEl) return;
+    
+    if (!folders || folders.length === 0) {
+        listEl.innerHTML = '<div class="settings-empty-state"><p>No folders added yet</p></div>';
+        return;
+    }
+    
+    listEl.innerHTML = folders.map(folder => `
+        <div class="settings-folder-item">
+            <span class="settings-folder-path">${folder}</span>
+            <button class="settings-folder-remove" data-path="${folder}">×</button>
+        </div>
+    `).join('');
+    
+    // Add remove handlers
+    listEl.querySelectorAll('.settings-folder-remove').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            try {
+                await API.removeFolder(btn.dataset.path);
+                loadSettingsModalData();
+            } catch (error) {
+                console.error('Failed to remove folder:', error);
+            }
+        });
+    });
+}
+
+function hideSettingsModal() {
+    if (settingsModal) settingsModal.style.display = 'none';
+}
+
+function showShortcutsModal() {
+    if (shortcutsModal) shortcutsModal.style.display = 'flex';
+}
+
+function hideShortcutsModal() {
+    if (shortcutsModal) shortcutsModal.style.display = 'none';
+}
+
+function showTrashModal() {
+    if (trashModal) trashModal.style.display = 'flex';
+}
+
+function hideTrashModal() {
+    if (trashModal) trashModal.style.display = 'none';
+}
+
+function hideDeleteConfirm() {
+    if (deleteConfirmModal) deleteConfirmModal.style.display = 'none';
+}
+
+function showJumpModal() {
+    if (jumpModal) {
+        jumpTotal.textContent = state.images.length;
+        jumpInput.value = '';
+        jumpModal.style.display = 'flex';
+        jumpInput.focus();
+    }
+}
+
+function hideJumpModal() {
+    if (jumpModal) jumpModal.style.display = 'none';
+}
+
+function handleJump() {
+    const num = parseInt(jumpInput?.value);
+    if (num && num >= 1 && num <= state.images.length) {
+        const targetIndex = num - 1;
+        const distance = Math.abs(targetIndex - state.currentIndex);
+        
+        // Use instant scroll for large jumps to avoid loading intermediate images
+        scrollToImage(targetIndex, distance > 10 ? 'instant' : 'smooth');
+        hideJumpModal();
+    }
+}
+
+// ============ Folders Modal ============
+
+async function showFoldersModal() {
+    if (foldersModal) {
+        foldersModal.style.display = 'flex';
+        foldersSearchInput.value = '';
+        foldersSortSelect.value = currentFolderSort;
+        await loadFoldersModalData();
+        foldersSearchInput?.focus();
+    }
+}
+
+function hideFoldersModal() {
+    if (foldersModal) foldersModal.style.display = 'none';
+}
+
+async function loadFoldersModalData() {
+    if (!foldersList) return;
+    
+    foldersList.innerHTML = '<div class="info-loading">Loading folders...</div>';
+    
+    try {
+        const folders = await API.getLeafFolders();
+        
+        if (!folders || folders.length === 0) {
+            foldersList.innerHTML = `
+                <div class="folders-modal-empty">
+                    <p>No folders with images found</p>
+                    <button class="folders-modal-empty-btn" id="foldersModalAddBtn">Add Folders</button>
+                </div>
+            `;
+            document.getElementById('foldersModalAddBtn')?.addEventListener('click', () => {
+                hideFoldersModal();
+                showSettingsModal();
+            });
+            return;
+        }
+        
+        leafFolders = folders;
+        renderFoldersModalList();
+        
+    } catch (error) {
+        console.error('Failed to load folders:', error);
+        foldersList.innerHTML = '<div class="info-error">Failed to load folders</div>';
+    }
+}
+
+function renderFoldersModalList(searchQuery = '') {
+    if (!foldersList) return;
+    
+    const activeFolder = state.currentFolderFilter;
+    
+    let filteredFolders = leafFolders;
+    if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        filteredFolders = leafFolders.filter(folder =>
+            folder.name.toLowerCase().includes(query) ||
+            folder.path.toLowerCase().includes(query)
+        );
+    }
+    
+    const sortedFolders = sortFolders(filteredFolders, currentFolderSort);
+    
+    if (sortedFolders.length === 0) {
+        foldersList.innerHTML = `
+            <div class="folders-modal-empty">
+                <p>${searchQuery.trim() ? 'No folders match your search' : 'No folders found'}</p>
+            </div>
+        `;
+        return;
+    }
+    
+    foldersList.innerHTML = sortedFolders.map(folder => {
+        const isActive = activeFolder === folder.path;
+        
+        return `
+            <div class="folders-modal-item${isActive ? ' active' : ''}" data-folder-path="${folder.path}">
+                <div class="folders-modal-item-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </div>
+                <div class="folders-modal-item-info">
+                    <div class="folders-modal-item-name">${folder.name}</div>
+                    <div class="folders-modal-item-path">${folder.path}</div>
+                </div>
+                <div class="folders-modal-item-count">${folder.count}</div>
+            </div>
+        `;
+    }).join('');
+    
+    // Add click handlers
+    document.querySelectorAll('.folders-modal-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const folderPath = item.dataset.folderPath;
+            hideFoldersModal();
+            enterFolderMode(folderPath);
+        });
+    });
+}
+
+function sortFolders(folders, sortBy) {
+    const sorted = [...folders];
+    
+    switch (sortBy) {
+        case 'count':
+            sorted.sort((a, b) => b.count - a.count);
+            break;
+        case 'name':
+            sorted.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+            break;
+        case 'newest':
+            sorted.sort((a, b) => (b.newest_mtime || 0) - (a.newest_mtime || 0));
+            break;
+    }
+    
+    return sorted;
+}
+
+// ============ Top Nav ============
+
+function initTopNav() {
+    setTimeout(async () => {
+        try {
+            const folders = await API.getLeafFolders();
+            folders.sort((a, b) => (a.newest_mtime || 0) - (b.newest_mtime || 0));
+            state.topNavFolders = folders;
+            state.topNavLoaded = true;
+            renderTopNavTabs();
+        } catch (error) {
+            console.error('Failed to load folders for top nav:', error);
+            renderTopNavTabs();
+        }
+    }, 1500);
+}
+
+function renderTopNavTabs() {
+    if (!topNavTabs) return;
+    
+    topNavTabs.innerHTML = '';
+    
+    // Add Trash tab
+    const trashTab = document.createElement('button');
+    trashTab.className = 'top-nav-tab';
+    trashTab.dataset.folder = 'trash';
+    trashTab.textContent = 'Trash';
+    trashTab.addEventListener('click', () => selectTopNavFolder('trash'));
+    topNavTabs.appendChild(trashTab);
+    
+    // Add Likes tab
+    const likesTab = document.createElement('button');
+    likesTab.className = 'top-nav-tab';
+    likesTab.dataset.folder = 'likes';
+    likesTab.textContent = 'Likes';
+    likesTab.addEventListener('click', () => selectTopNavFolder('likes'));
+    topNavTabs.appendChild(likesTab);
+    
+    // Add folder tabs
+    state.topNavFolders.forEach(folder => {
+        const tab = document.createElement('button');
+        tab.className = 'top-nav-tab';
+        tab.dataset.folder = folder.path;
+        const displayName = folder.name.length > 15 ? folder.name.substring(0, 15) + '…' : folder.name;
+        tab.textContent = displayName;
+        tab.title = folder.name;
+        tab.addEventListener('click', () => selectTopNavFolder(folder.path));
+        topNavTabs.appendChild(tab);
+    });
+    
+    // Add All tab
+    const allTab = document.createElement('button');
+    allTab.className = 'top-nav-tab active';
+    allTab.dataset.folder = 'all';
+    allTab.textContent = 'All';
+    allTab.addEventListener('click', () => selectTopNavFolder('all'));
+    topNavTabs.appendChild(allTab);
+    
+    updateTopNavActiveState();
+    
+    topNavTabs.classList.add('animate-sweep');
+    requestAnimationFrame(() => {
+        topNavTabs.scrollLeft = topNavTabs.scrollWidth;
+    });
+}
+
+async function selectTopNavFolder(folderPath) {
+    if (folderPath === 'all') {
+        if (state.showingFolderOnly) exitFolderMode();
+        if (state.showingFavoritesOnly) exitFavoritesMode();
+        if (state.showingTrashOnly) exitTrashMode();
+        state.currentTopNavFolder = 'all';
+    } else if (folderPath === 'likes') {
+        if (state.showingFolderOnly) exitFolderMode();
+        if (state.showingTrashOnly) exitTrashMode();
+        if (!state.showingFavoritesOnly) await enterFavoritesMode();
+        state.currentTopNavFolder = 'likes';
+    } else if (folderPath === 'trash') {
+        if (state.showingFolderOnly) exitFolderMode();
+        if (state.showingFavoritesOnly) exitFavoritesMode();
+        if (!state.showingTrashOnly) await viewTrash();
+        state.currentTopNavFolder = 'trash';
+    } else {
+        if (state.showingFavoritesOnly) exitFavoritesMode();
+        if (state.showingTrashOnly) exitTrashMode();
+        if (state.currentFolderFilter !== folderPath) {
+            await enterFolderMode(folderPath);
+        }
+        state.currentTopNavFolder = folderPath;
+    }
+    
+    updateTopNavActiveState();
+}
+
+function updateTopNavActiveState() {
+    if (!topNavTabs) return;
+    
+    document.querySelectorAll('.top-nav-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    let activeFolder = 'all';
+    if (state.showingTrashOnly) activeFolder = 'trash';
+    else if (state.showingFavoritesOnly) activeFolder = 'likes';
+    else if (state.showingFolderOnly) activeFolder = normalizePath(state.currentFolderFilter);
+    
+    // Find the matching tab - normalize paths for comparison
+    let activeTab = null;
+    document.querySelectorAll('.top-nav-tab').forEach(tab => {
+        const tabFolder = tab.dataset.folder;
+        if (normalizePath(tabFolder) === activeFolder) {
+            activeTab = tab;
+        }
+    });
+    
+    if (activeTab) {
+        activeTab.classList.add('active');
+        // Scroll the active tab into view
+        activeTab.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+}
+
+function toggleTopNavDropdown() {
+    if (topNavDropdown) {
+        topNavDropdown.classList.toggle('visible');
+    }
+}
+
+/**
+ * Handle dropdown option selection
+ */
+function handleDropdownOption(sortType) {
+    // Close dropdown
+    if (topNavDropdown) {
+        topNavDropdown.classList.remove('visible');
+    }
+    
+    // Update active state
+    document.querySelectorAll('.dropdown-option').forEach(opt => {
+        opt.classList.remove('active');
+    });
+    document.querySelector(`.dropdown-option[data-sort="${sortType}"]`)?.classList.add('active');
+    
+    switch (sortType) {
+        case 'newest':
+            // Already default, reload images
+            reloadImages('newest');
+            break;
+        case 'oldest':
+            reloadImages('oldest');
+            break;
+        case 'jump':
+            showJumpModal();
+            break;
+    }
+}
+
+/**
+ * Reload images with different sort order
+ * Context-aware: reloads based on current view mode (folder, favorites, trash, or all)
+ */
+async function reloadImages(sortOrder) {
+    try {
+        // Store current sort order
+        state.currentSortOrder = sortOrder;
+        
+        // Reload based on current view mode
+        if (state.showingTrashOnly) {
+            state.images = await API.getTrashImages(sortOrder);
+        } else if (state.showingFavoritesOnly) {
+            if (state.showingFolderOnly && state.currentFolderFilter) {
+                state.images = await API.getFavoriteImagesByFolder(state.currentFolderFilter);
+                // Sort locally since this endpoint doesn't support sort param
+                if (sortOrder === 'oldest') {
+                    state.images = [...state.images].reverse();
+                }
+            } else {
+                state.images = await API.getFavoriteImages(sortOrder);
+            }
+        } else if (state.showingFolderOnly && state.currentFolderFilter) {
+            state.images = await API.getImagesByFolder(state.currentFolderFilter, sortOrder);
+        } else {
+            state.images = await API.getImages(sortOrder);
+        }
+        
+        // Clear shuffle backup when changing sort
+        state.unshuffledImages = [];
+        
+        // Reset to first image
+        state.currentIndex = 0;
+        
+        showLoadingOverlay();
+        buildSlides();
+        prioritizeFirstImage();
+        updateUI();
+        
+        // Scroll to first image - use instant since we're resetting position
+        scrollToImage(0, 'instant');
+        
+    } catch (error) {
+        console.error('Failed to reload images:', error);
+    }
+}
+
+/**
+ * Setup double-tap to like functionality
+ * Double tap = spawn heart (and add favorite - only adds, doesn't remove)
+ * Subsequent taps within 0.5s = spawn more hearts
+ * Single tap = mute/unmute video
+ */
+function setupDoubleTapToLike() {
+    let lastTapTime = 0;
+    let lastTapTarget = null;
+    let lastTapX = 0;
+    let lastTapY = 0;
+    let tapCount = 0;
+    let singleTapTimeout = null;
+    const TAP_WINDOW = 500; // 0.5 seconds for subsequent taps
+    
+    scrollContainer?.addEventListener('click', (e) => {
+        const now = Date.now();
+        const slide = e.target.closest('.image-slide');
+        
+        // Only handle clicks on slides (not buttons)
+        if (!slide || e.target.closest('button') || e.target.closest('.action-bar')) {
+            return;
+        }
+        
+        const src = slide.dataset.src;
+        const isVideo = isVideoUrl(src);
+        
+        // Check if this is a tap within the window on the same slide
+        if (now - lastTapTime < TAP_WINDOW && lastTapTarget === slide) {
+            // Clear any pending single-tap timeout
+            if (singleTapTimeout) {
+                clearTimeout(singleTapTimeout);
+                singleTapTimeout = null;
+            }
+            
+            // Subsequent tap - spawn heart
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // First subsequent tap adds favorite (only adds, doesn't toggle off)
+            if (tapCount === 1) {
+                addFavorite();
+            }
+            
+            // Show heart animation at tap position
+            showHeartAnimation(slide, e.clientX, e.clientY);
+            
+            tapCount++;
+            lastTapTime = now;
+            lastTapX = e.clientX;
+            lastTapY = e.clientY;
+        } else {
+            // First tap - wait to see if there's a second tap
+            lastTapTime = now;
+            lastTapTarget = slide;
+            lastTapX = e.clientX;
+            lastTapY = e.clientY;
+            tapCount = 1;
+            
+            // After the window expires, if there was only one tap, handle as single tap
+            singleTapTimeout = setTimeout(() => {
+                // If we're still on the same slide and only had one tap
+                if (tapCount === 1 && lastTapTarget === slide && lastTapTime === now) {
+                    // Single tap - mute/unmute video
+                    if (isVideo) {
+                        const video = slide.querySelector('video');
+                        if (video) {
+                            toggleVideoMute(video, slide);
+                        }
+                    }
+                }
+                singleTapTimeout = null;
+            }, TAP_WINDOW);
+        }
+    });
+}
+
+/**
+ * Show heart animation on double-tap at tap position
+ */
+function showHeartAnimation(slide, x, y) {
+    const heart = document.createElement('div');
+    heart.className = 'double-tap-heart';
+    heart.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="#FF2D55">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+        </svg>
+    `;
+    
+    // Position heart at tap location
+    const slideRect = slide.getBoundingClientRect();
+    heart.style.left = `${x - slideRect.left}px`;
+    heart.style.top = `${y - slideRect.top}px`;
+    heart.style.transform = 'translate(-50%, -50%)';
+    
+    slide.appendChild(heart);
+    
+    // Remove after animation
+    setTimeout(() => {
+        heart.remove();
+    }, 800);
+}
+
+// ============ Keyboard Handling ============
+
+function handleKeyboard(e) {
+    // Check if modal is open
+    if (isAnyModalOpen()) {
+        if (e.key === 'Escape') {
+            // Close all modals
+            [infoModal, settingsModal, shortcutsModal, foldersModal, trashModal, jumpModal, deleteConfirmModal].forEach(modal => {
+                if (modal) modal.style.display = 'none';
+            });
+        }
+        return;
+    }
+    
+    // Don't trigger if typing in input
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        return;
+    }
+    
+    switch (e.key) {
+        case 'h':
+        case 'ArrowLeft':
+            toggleTrash();
+            break;
+        case 'j':
+        case 'ArrowDown':
+            scrollToImage(state.currentIndex + 1);
+            break;
+        case 'k':
+        case 'ArrowUp':
+            scrollToImage(state.currentIndex - 1);
+            break;
+        case 'l':
+        case 'ArrowRight':
+            toggleFavorite();
+            break;
+        case 'f':
+            toggleFavoritesMode();
+            break;
+        case 'd':
+            if (state.showingTrashOnly) {
+                exitTrashMode();
+            } else {
+                viewTrash();
+            }
+            break;
+        case 'm':
+            // Mute/unmute video
+            const currentSlide = document.querySelector(`.image-slide[data-index="${state.currentIndex}"]`);
+            const video = currentSlide?.querySelector('video');
+            if (video) toggleVideoMute(video, currentSlide);
+            break;
+        case 'i':
+            showInfoModal();
+            break;
+        case 's':
+            showSettingsModal();
+            break;
+        case '?':
+            showShortcutsModal();
+            break;
+        case 'Escape':
+            // Exit current mode
+            if (state.showingFavoritesOnly) exitFavoritesMode();
+            if (state.showingFolderOnly) exitFolderMode();
+            if (state.showingTrashOnly) exitTrashMode();
+            break;
+    }
+}
+
+// ============ Auto-Advance Functions ============
+
+/**
+ * Start the auto-advance timer for photos
+ * Only starts if auto-advance is enabled and current item is a photo
+ */
+function startAutoAdvanceTimer() {
+    // Only start if auto-advance is enabled
+    if (!state.optimizations.auto_advance) return;
+    
+    // Don't start if at the last image
+    if (state.currentIndex >= state.images.length - 1) return;
+    
+    // Clear any existing timer
+    clearAutoAdvanceTimer();
+    
+    const currentSrc = state.images[state.currentIndex];
+    
+    // Only start timer for photos (not videos)
+    if (!isVideoUrl(currentSrc)) {
+        const delay = state.optimizations.auto_advance_delay * 1000;
+        autoAdvanceTimer = setTimeout(() => {
+            // Double-check we're still on the same image and not at the end
+            if (state.currentIndex < state.images.length - 1) {
+                scrollToImage(state.currentIndex + 1);
+            }
+        }, delay);
+    }
+}
+
+/**
+ * Clear the auto-advance timer
+ */
+function clearAutoAdvanceTimer() {
+    if (autoAdvanceTimer) {
+        clearTimeout(autoAdvanceTimer);
+        autoAdvanceTimer = null;
+    }
+}
+
+/**
+ * Update the auto-advance indicator visibility
+ */
+function updateAutoAdvanceIndicator() {
+    const indicator = document.getElementById('autoAdvanceIndicator');
+    if (indicator) {
+        indicator.style.display = state.optimizations.auto_advance ? 'flex' : 'none';
+    }
+}
+
+/**
+ * Show a toast notification
+ * @param {string} message - The message to display
+ */
+function showToast(message) {
+    const toast = document.getElementById('toastNotification');
+    if (toast) {
+        toast.textContent = message;
+        toast.style.display = 'block';
+        
+        // Hide after 2 seconds
+        setTimeout(() => {
+            toast.style.display = 'none';
+        }, 2000);
+    }
+}
+
+/**
+ * Toggle auto-advance off (called when indicator is clicked)
+ */
+function toggleAutoAdvanceOff() {
+    state.optimizations.auto_advance = false;
+    clearAutoAdvanceTimer();
+    updateAutoAdvanceIndicator();
+    
+    // Update the settings toggle if it exists
+    const toggle = document.getElementById('toggleAutoAdvance');
+    if (toggle) {
+        toggle.checked = false;
+    }
+    
+    // Save to server
+    API.saveSettings({ auto_advance: false });
+    
+    showToast('Auto-advance turned off');
+}
+
+/**
+ * Scroll to a specific image
+ * @param {number} index - Target image index
+ * @param {string} behavior - Scroll behavior: 'smooth', 'instant', or 'auto'
+ *                            If not specified, uses 'smooth' for small distances, 'instant' for large
+ */
+function scrollToImage(index, behavior = null) {
+    if (index < 0 || index >= state.images.length) return;
+    
+    const slide = document.querySelector(`.image-slide[data-index="${index}"]`);
+    if (!slide) return;
+    
+    // Determine scroll behavior if not specified
+    if (behavior === null) {
+        const distance = Math.abs(index - state.currentIndex);
+        behavior = distance > 10 ? 'instant' : 'smooth';
+    }
+    
+    slide.scrollIntoView({ behavior });
+}
+
+// ============ Start Application ============
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
+
+// Export for debugging
+window.app = { state, API };
