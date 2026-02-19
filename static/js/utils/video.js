@@ -70,6 +70,7 @@ export function setupVideoProgress(video, slide) {
     const progressContainer = slide.querySelector('.video-progress-container');
     const progressBar = slide.querySelector('.video-progress-bar');
     const progressFilled = slide.querySelector('.video-progress-filled');
+    const progressBuffered = slide.querySelector('.video-progress-buffered');
     const timeDisplay = slide.querySelector('.video-time-display');
     
     if (!progressContainer || !progressFilled || !progressBar) return;
@@ -89,9 +90,22 @@ export function setupVideoProgress(video, slide) {
         }
     });
     
+    // Update buffer indicator as video loads
+    video.addEventListener('progress', () => {
+        if (!progressBuffered || !video.duration || !isFinite(video.duration)) return;
+        
+        // Get the last buffered range (most recent)
+        if (video.buffered.length > 0) {
+            const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+            const bufferedPercent = (bufferedEnd / video.duration) * 100;
+            progressBuffered.style.width = `${bufferedPercent}%`;
+        }
+    });
+    
     // Reset progress bar when video loops
     video.addEventListener('loadedmetadata', () => {
         progressFilled.style.width = '0%';
+        if (progressBuffered) progressBuffered.style.width = '0%';
     });
     
     // Handle seeking by tapping/clicking on progress bar
@@ -151,11 +165,12 @@ export function addVideoControls(slide, video) {
     `;
     slide.appendChild(muteIcon);
     
-    // Create progress bar with inline time display
+    // Create progress bar with buffer indicator and inline time display
     const progressContainer = document.createElement('div');
     progressContainer.className = 'video-progress-container';
     progressContainer.innerHTML = `
         <div class="video-progress-bar">
+            <div class="video-progress-buffered"></div>
             <div class="video-progress-filled">
                 <div class="video-progress-handle"></div>
             </div>

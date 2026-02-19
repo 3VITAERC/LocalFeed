@@ -232,9 +232,66 @@ def _convert_exif_value(value):
     return value
 
 
+def _parse_range_header(range_header, file_size):
+    """Parse HTTP Range header and return (start, end) tuple.
+    
+    Supports formats:
+        bytes=0-1023        (explicit range)
+        bytes=0-            (from start to end)
+        bytes=-1023         (last 1023 bytes)
+    
+    Returns (None, None) if invalid.
+    """
+    try:
+        # Remove 'bytes=' prefix
+        if not range_header.startswith('bytes='):
+            return None, None
+        
+        range_spec = range_header[6:].strip()
+        
+        # Handle multiple ranges (we only support single range)
+        # Just take the first range if multiple specified
+        if ',' in range_spec:
+            range_spec = range_spec.split(',')[0].strip()
+        
+        # Parse start and end
+        if range_spec.startswith('-'):
+            # Suffix range: last N bytes
+            suffix_length = int(range_spec[1:])
+            start = max(0, file_size - suffix_length)
+            end = file_size - 1
+        elif range_spec.endswith('-'):
+            # Open-ended range: from start to end of file
+            start = int(range_spec[:-1])
+            end = file_size - 1
+        else:
+            # Explicit range: start-end
+            parts = range_spec.split('-')
+            if len(parts) != 2:
+                return None, None
+            start = int(parts[0])
+            end = int(parts[1])
+        
+        # Validate range
+        if start < 0 or end < start or start >= file_size:
+            return None, None
+        
+        # Clamp end to file size
+        end = min(end, file_size - 1)
+        
+        return start, end
+    except (ValueError, IndexError):
+        return None, None
+
+
 @images_bp.route('/image')
 def serve_image():
-    """Serve an image file by path."""
+    """Serve an image file by path.
+    
+    For video files, supports HTTP Range requests for streaming.
+    This allows browsers to request only the bytes they need,
+    enabling instant video start and efficient seeking.
+    """
     image_path = request.args.get('path')
     
     if not image_path:
@@ -263,11 +320,50 @@ def serve_image():
     etag_hash = hashlib.md5(f"{expanded_image}:{file_mtime}:{file_size}".encode()).hexdigest()
     etag = f'"{etag_hash}"'
     
-    # Check If-None-Match header for 304 response
+    # For video files, handle Range requests for streaming
+    if ext in VIDEO_FORMATS:
+        range_header = request.headers.get('Range')
+        
+        if range_header:
+            # Parse the range request
+            start, end = _parse_range_header(range_header, file_size)
+            
+            if start is not None:
+                # Read only the requested chunk
+                with open(expanded_image, 'rb') as f:
+                    f.seek(start)
+                    data = f.read(end - start + 1)
+                
+                response = make_response(data)
+                response.status_code = 206  # Partial Content
+                response.headers['Content-Range'] = f'bytes {start}-{end}/{file_size}'
+                response.headers['Content-Length'] = len(data)
+                response.headers['Content-Type'] = mime_type
+                response.headers['Accept-Ranges'] = 'bytes'
+                response.headers['Cache-Control'] = 'public, max-age=604800'
+                response.headers['ETag'] = etag
+                response.headers['Last-Modified'] = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime(file_mtime))
+                return response
+            else:
+                # Invalid range - return 416 error
+                response = make_response('Requested Range Not Satisfiable')
+                response.status_code = 416
+                response.headers['Content-Range'] = f'bytes */{file_size}'
+                return response
+        
+        # No Range header for video - still advertise support
+        response = make_response(send_file(expanded_image, mimetype=mime_type))
+        response.headers['Accept-Ranges'] = 'bytes'
+        response.headers['Cache-Control'] = 'public, max-age=604800'
+        response.headers['ETag'] = etag
+        response.headers['Last-Modified'] = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime(file_mtime))
+        return response
+    
+    # Check If-None-Match header for 304 response (images only)
     if request.headers.get('If-None-Match') == etag:
         return '', 304
     
-    # Check If-Modified-Since header for 304 response
+    # Check If-Modified-Since header for 304 response (images only)
     if_modified_since = request.headers.get('If-Modified-Since')
     if if_modified_since:
         try:
@@ -278,17 +374,13 @@ def serve_image():
         except (ValueError, TypeError):
             pass
     
-    # Create response with caching headers
+    # Create response with caching headers (images)
     response = make_response(send_file(expanded_image, mimetype=mime_type))
     
     # Set caching headers (7 days for images)
     response.headers['Cache-Control'] = 'public, max-age=604800, immutable'
     response.headers['ETag'] = etag
     response.headers['Last-Modified'] = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime(file_mtime))
-    
-    # Add Accept-Ranges header for video files (enables seeking)
-    if ext in VIDEO_FORMATS:
-        response.headers['Accept-Ranges'] = 'bytes'
     
     return response
 

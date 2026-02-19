@@ -235,6 +235,10 @@ function _activateMedia(slide) {
         if (video) {
             // Videos are ALWAYS muted — audio is handled by the separate _audioEl
             video.muted = true;
+            
+            // Restore preload to 'auto' for active video so it buffers
+            // (was set to 'none' when deactivated)
+            video.preload = 'auto';
 
             // Play the video (muted autoplay is always allowed)
             video.play().catch((err) => {
@@ -261,7 +265,7 @@ function _activateMedia(slide) {
 
 /**
  * Deactivate media on a slide:
- *   – Video → pause
+ *   – Video → pause and stop buffering
  *   – GIF   → freeze
  */
 function _deactivateMedia(slide) {
@@ -272,6 +276,11 @@ function _deactivateMedia(slide) {
         const video = slide.querySelector('video');
         if (video) {
             video.pause();
+            
+            // Stop any pending Range requests / buffering
+            // Setting preload to 'none' tells the browser to stop downloading
+            video.preload = 'none';
+            
             // If this was the active video, stop audio sync
             if (video === _activeVideo) {
                 _stopAudioSync();

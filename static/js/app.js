@@ -798,13 +798,16 @@ function loadVideoForSlide(slide, src, isConvertedGif = false, isPriorityImage =
     
     video.onloadedmetadata = function() {
         // Metadata loaded (duration, dimensions available).
-        // For non-priority videos, upgrade to 'auto' now that we know the video
-        // is valid and worth buffering. This works on Chrome/Firefox.
-        // Safari iOS ignores this change, but that's OK — non-priority videos
-        // will load their data when _activateMedia calls play() on them.
-        if (!isPriorityImage) {
-            this.preload = 'auto';
-        }
+        // With HTTP Range request support, we don't need to force 'auto' preload
+        // for non-priority videos. The browser will request data as needed when
+        // the video plays, using Range requests to stream efficiently.
+        // This prevents bandwidth contention from multiple videos downloading.
+        //
+        // Priority videos (current slide) get 'auto' to buffer for smooth playback.
+        // Non-priority videos stay at 'metadata' and stream when activated.
+        //
+        // Note: Safari iOS ignores preload changes anyway, but with Range support
+        // it will stream efficiently when play() is called.
     };
     
     video.onloadeddata = function() {

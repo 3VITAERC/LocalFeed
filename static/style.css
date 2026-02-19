@@ -264,12 +264,25 @@ html, body {
     height: 5px;
 }
 
+/* Buffer indicator - shows how much has been downloaded */
+.video-progress-buffered {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.4);
+    border-radius: 2px;
+    width: 0%;
+    z-index: 1;
+}
+
 .video-progress-filled {
     height: 100%;
     background: #fff;
     border-radius: 2px;
     width: 0%;
     position: relative;
+    z-index: 2;
 }
 
 .video-progress-handle {
