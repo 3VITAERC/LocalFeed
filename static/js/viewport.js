@@ -33,7 +33,9 @@ let _scrollContainer = null;
 let _onActiveChange = null;    // callback(newIndex) — wired in from app.js
 let _audioUnlocked = false;    // true after first user gesture unlocks audio
 let _audioEnabled = false;     // user's desired audio state (persists across slides)
-let _audioEl = null;           // single <audio> element for all video sound
+let _audioEl = null;           // current <audio> element for video sound
+let _nextAudioEl = null;       // second <audio> for +1 slide preloading
+let _nextAudioSrc = null;      // track what's loaded in _nextAudioEl
 let _activeVideo = null;       // current video element being synced to audio
 let _syncInterval = null;      // interval for audio/video time sync
 let _hasActivatedOnce = false; // true after first slide activation (handles index-0 initial load)
@@ -302,12 +304,14 @@ function _deactivateMedia(slide) {
 // ─── Audio Element Management ─────────────────────────────────────────────────
 
 /**
- * Create the single <audio> element used for all video sound.
+ * Create the <audio> elements used for video sound.
+ * Creates two elements: one for current video, one for preloading next video.
  * Must be called from a user gesture handler.
  */
 function _createAudioElement() {
     if (_audioEl) return;
 
+    // Current audio element
     _audioEl = document.createElement('audio');
     _audioEl.preload = 'auto';
     // Don't append to DOM — just keep in memory
@@ -316,11 +320,22 @@ function _createAudioElement() {
     _audioEl.addEventListener('error', (e) => {
         console.warn('[Viewport] Audio element error:', e);
     });
+    
+    // Second audio element for preloading next video's audio
+    _nextAudioEl = document.createElement('audio');
+    _nextAudioEl.preload = 'auto';
+    
+    _nextAudioEl.addEventListener('error', (e) => {
+        console.warn('[Viewport] Next audio element error:', e);
+    });
 }
 
 /**
  * Attach the audio element to the currently active video.
  * Syncs src and currentTime, then plays.
+ * 
+ * Uses a swap mechanism: if the next audio element already has this src
+ * preloaded, we swap elements instead of loading fresh.
  */
 function _attachAudioToActiveVideo() {
     if (!_audioEl || !_activeVideo) return;
@@ -331,17 +346,49 @@ function _attachAudioToActiveVideo() {
     // Stop any existing sync
     _stopAudioSync();
 
-    // If src changed, update it
-    if (_audioEl.src !== videoSrc) {
+    // Normalize URLs for comparison (handle relative vs absolute)
+    // video.src is absolute, _nextAudioSrc may be relative
+    const normalizedVideoSrc = videoSrc;
+    const normalizedNextSrc = _nextAudioSrc ? _normalizeAudioSrc(_nextAudioSrc) : null;
+    const normalizedCurrentSrc = _audioEl.src;
+
+    // Check if next audio element already has this src preloaded
+    if (_nextAudioEl && normalizedNextSrc === normalizedVideoSrc) {
+        // SWAP: next becomes current, current becomes next (for reuse)
+        const tempEl = _audioEl;
+        _audioEl = _nextAudioEl;
+        _nextAudioEl = tempEl;
+        _nextAudioSrc = null;
+        console.log('[Viewport] Audio swap: using preloaded audio for', videoSrc.substring(0, 50));
+    } else if (normalizedCurrentSrc !== normalizedVideoSrc) {
+        // Fallback: load fresh (not preloaded)
         _audioEl.src = videoSrc;
         _audioEl.load();
+        console.log('[Viewport] Audio load: loading fresh for', videoSrc.substring(0, 50));
     }
 
     // Sync time and play
-    _audioEl.currentTime = _activeVideo.currentTime;
-    _audioEl.play().catch((err) => {
-        console.warn('[Viewport] Audio play failed:', err.message);
-    });
+    // Wait for audio to be ready if it was just loaded
+    const startAudio = () => {
+        if (_audioEl.readyState >= 2) {  // HAVE_CURRENT_DATA
+            _audioEl.currentTime = _activeVideo.currentTime;
+            _audioEl.play().catch((err) => {
+                console.warn('[Viewport] Audio play failed:', err.message);
+            });
+        } else {
+            // Wait for data to load
+            _audioEl.addEventListener('canplay', function onCanPlay() {
+                _audioEl.removeEventListener('canplay', onCanPlay);
+                if (_activeVideo) {
+                    _audioEl.currentTime = _activeVideo.currentTime;
+                    _audioEl.play().catch((err) => {
+                        console.warn('[Viewport] Audio play failed:', err.message);
+                    });
+                }
+            }, { once: true });
+        }
+    };
+    startAudio();
 
     // Keep audio in sync with video via periodic check
     // (timeupdate fires too infrequently for smooth sync)
@@ -350,16 +397,65 @@ function _attachAudioToActiveVideo() {
             _stopAudioSync();
             return;
         }
-        // Re-sync if drift exceeds 0.3 seconds
+        // Re-sync if drift exceeds 0.15 seconds (tighter for smoother audio)
         const drift = Math.abs(_audioEl.currentTime - _activeVideo.currentTime);
-        if (drift > 0.3) {
+        if (drift > 0.15) {
             _audioEl.currentTime = _activeVideo.currentTime;
         }
         // Pause audio if video is paused
         if (_activeVideo.paused && !_audioEl.paused) {
             _audioEl.pause();
         }
-    }, 250);
+    }, 100);  // More frequent checks for smoother sync
+}
+
+/**
+ * Normalize a URL for comparison.
+ * Converts relative URLs to absolute using the current origin.
+ */
+function _normalizeAudioSrc(src) {
+    if (!src) return null;
+    // If already absolute, return as-is
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+        return src;
+    }
+    // Convert relative to absolute
+    return window.location.origin + (src.startsWith('/') ? '' : '/') + src;
+}
+
+/**
+ * Preload audio for the next video slide (+1 position).
+ * Call this when identifying the next slide during sequentialPreload.
+ * 
+ * @param {string} videoSrc - The video source URL to preload audio for
+ */
+export function preloadAudioForNextSlide(videoSrc) {
+    // Don't preload if audio not unlocked yet (no user gesture)
+    if (!_audioUnlocked || !_nextAudioEl || !videoSrc) return;
+    
+    // Normalize for comparison
+    const normalizedVideoSrc = _normalizeAudioSrc(videoSrc);
+    
+    // Don't reload if already preloaded
+    if (_nextAudioSrc && _normalizeAudioSrc(_nextAudioSrc) === normalizedVideoSrc) return;
+    
+    // Don't preload if this is the current video's src
+    if (_audioEl && _audioEl.src === normalizedVideoSrc) return;
+    
+    _nextAudioEl.src = videoSrc;
+    _nextAudioEl.load();
+    _nextAudioSrc = videoSrc;  // Store original (relative or absolute)
+    
+    // Force buffering with play/pause trick (same as video first-frame)
+    // This ensures audio data is actually downloaded, not just metadata
+    _nextAudioEl.play().then(() => {
+        _nextAudioEl.pause();
+        _nextAudioEl.currentTime = 0;
+        console.log('[Viewport] Audio preload: buffered for', videoSrc.substring(0, 50));
+    }).catch(() => {
+        // Autoplay blocked — audio will load when needed
+        console.log('[Viewport] Audio preload: load() only for', videoSrc.substring(0, 50));
+    });
 }
 
 /**
@@ -389,4 +485,5 @@ export default {
     activateSlideByIndex,
     toggleGlobalMute,
     isAudioEnabled,
+    preloadAudioForNextSlide,
 };

@@ -20,6 +20,7 @@ import {
     activateSlideByIndex,
     toggleGlobalMute,
     isAudioEnabled,
+    preloadAudioForNextSlide,
 } from './viewport.js';
 
 // Import API client
@@ -987,6 +988,14 @@ function sequentialPreload(centerIndex, current, max, ahead = true) {
         // This gives instant playback when user scrolls forward
         const isNextSlide = (ahead && current === 1);
         loadImageForSlide(slide, false, isNextSlide);
+        
+        // Preload audio for next video slide (+1 position)
+        if (isNextSlide) {
+            const src = slide.dataset.src;
+            if (src && isVideoUrl(src)) {
+                preloadAudioForNextSlide(src);
+            }
+        }
     } else if (slide && ahead && current === 1) {
         // Slide already loaded — check if it's a video that needs first-frame rendering
         // This handles the case where a video was preloaded with preload='metadata'
@@ -1005,6 +1014,12 @@ function sequentialPreload(centerIndex, current, max, ahead = true) {
             }).catch(() => {
                 // Autoplay blocked — video will play when scrolled to
             });
+        }
+        
+        // Preload audio for next video slide (+1 position) even if already loaded
+        const src = slide.dataset.src;
+        if (src && isVideoUrl(src)) {
+            preloadAudioForNextSlide(src);
         }
     }
     

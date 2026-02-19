@@ -307,9 +307,52 @@ function prioritizeFirstImage(priorityIndex = 0):
     // Immediately load target image before IntersectionObserver triggers
     // Wait for it to be ready, then sequentially preload adjacent
 
-function loadImageForSlide(slide, isPriorityImage = false):
+function loadImageForSlide(slide, isPriorityImage = false, isNextSlide = false):
     // If isPriorityImage, hide loading overlay when content loads
+    // If isNextSlide, pre-buffer video and render first frame
 ```
+
+### Video First-Frame Rendering
+
+To eliminate black flash when scrolling to a video, the `+1` slide uses the **play/pause trick**:
+
+```javascript
+// In loadVideoForSlide() onloadeddata handler:
+if (isNextSlide) {
+    video.play().then(() => {
+        // Guard: only pause if user hasn't scrolled to this slide
+        if (idx !== state.currentIndex) {
+            video.pause();
+            video.currentTime = 0;
+        }
+    });
+}
+```
+
+This forces the browser to decode and paint the first frame, even while paused. Works on all browsers including iOS Safari.
+
+### Audio Preloading
+
+Videos use a **dual audio element** architecture for instant audio:
+
+```javascript
+// In viewport.js
+let _audioEl = null;           // Current video's audio
+let _nextAudioEl = null;       // Preloaded for +1 video
+let _nextAudioSrc = null;      // Track what's loaded
+
+// During sequentialPreload():
+preloadAudioForNextSlide(videoSrc);  // Loads into _nextAudioEl
+
+// On scroll:
+// Swap _audioEl ↔ _nextAudioEl instead of loading fresh
+```
+
+**Key implementation details:**
+- URL normalization handles relative vs absolute URLs
+- Play/pause trick forces actual audio buffering
+- `canplay` event handling for currentTime sync
+- Sync interval: 100ms with 0.15s drift threshold
 
 ### Loading Indicator
 

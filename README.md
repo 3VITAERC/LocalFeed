@@ -154,7 +154,12 @@ In Settings, you can toggle:
 
 ### Video Loading
 
-When enabled, videos show a **poster frame** (blurred preview) first, then smoothly crossfade to the playing video when ready. This provides instant visual feedback while the video loads, with a smooth transition that eliminates black flashing.
+Videos are optimized for smooth scrolling with several techniques:
+
+- **First-frame rendering:** The next video in queue (+1 slide) pre-renders its first frame, eliminating black flash when scrolling
+- **Audio preloading:** Audio for the next video is pre-buffered, ensuring instant sound when you scroll
+- **Poster frames:** When enabled, videos show a blurred preview first, then crossfade to the playing video
+- **HTTP Range requests:** Videos stream efficiently — only ~1-2MB is buffered ahead, saving bandwidth
 
 ## Cross-Platform Support
 
