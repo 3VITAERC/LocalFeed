@@ -389,6 +389,7 @@ function _createAudioElement() {
     // Second audio element for preloading next video's audio
     _nextAudioEl = document.createElement('audio');
     _nextAudioEl.preload = 'auto';
+    _nextAudioEl.muted = true;  // Start muted - unmuted when swapped into active use
     
     _nextAudioEl.addEventListener('error', (e) => {
         console.warn('[Viewport] Next audio element error:', e);
@@ -424,6 +425,10 @@ function _attachAudioToActiveVideo() {
         _audioEl = _nextAudioEl;
         _nextAudioEl = tempEl;
         _nextAudioSrc = null;
+        
+        // Unmute the now-current audio element (was muted during preload to prevent bleed)
+        _audioEl.muted = false;
+        
         console.log('[Viewport] Audio swap: using preloaded audio for', videoSrc.substring(0, 50));
     } else if (normalizedCurrentSrc !== normalizedVideoSrc) {
         // Fallback: load fresh (not preloaded)
@@ -511,8 +516,12 @@ export function preloadAudioForNextSlide(videoSrc) {
     _nextAudioEl.load();
     _nextAudioSrc = videoSrc;  // Store original (relative or absolute)
     
+    // Ensure muted during preload to prevent audio bleed
+    _nextAudioEl.muted = true;
+    
     // Force buffering with play/pause trick (same as video first-frame)
     // This ensures audio data is actually downloaded, not just metadata
+    // Audio remains muted - will be unmuted when swapped into active use
     _nextAudioEl.play().then(() => {
         _nextAudioEl.pause();
         _nextAudioEl.currentTime = 0;
