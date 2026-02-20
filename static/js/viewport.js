@@ -467,16 +467,34 @@ function _attachAudioToActiveVideo() {
             _stopAudioSync();
             return;
         }
-        // Re-sync if drift exceeds 0.15 seconds (tighter for smoother audio)
-        const drift = Math.abs(_audioEl.currentTime - _activeVideo.currentTime);
-        if (drift > 0.15) {
-            _audioEl.currentTime = _activeVideo.currentTime;
-        }
+        
         // Pause audio if video is paused
-        if (_activeVideo.paused && !_audioEl.paused) {
-            _audioEl.pause();
+        if (_activeVideo.paused) {
+            if (!_audioEl.paused) _audioEl.pause();
+            return;
         }
-    }, 100);  // More frequent checks for smoother sync
+        
+        // Calculate drift (positive = audio ahead, negative = audio behind)
+        const drift = _audioEl.currentTime - _activeVideo.currentTime;
+        const absDrift = Math.abs(drift);
+        
+        if (absDrift > 1.0) {
+            // Large drift - need to seek (causes brief gap but necessary)
+            _audioEl.currentTime = _activeVideo.currentTime;
+            _audioEl.playbackRate = 1.0;
+        } else if (absDrift > 0.05) {
+            // Small drift - use playback rate adjustment to catch up smoothly
+            // This avoids seek latency that causes chunky audio
+            // Audio behind (drift < 0): speed up slightly
+            // Audio ahead (drift > 0): slow down slightly
+            _audioEl.playbackRate = drift > 0 ? 0.95 : 1.05;
+        } else {
+            // In sync - normal playback
+            if (_audioEl.playbackRate !== 1.0) {
+                _audioEl.playbackRate = 1.0;
+            }
+        }
+    }, 100);  // Check frequently for smooth sync
 }
 
 /**
