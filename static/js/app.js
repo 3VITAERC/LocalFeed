@@ -995,6 +995,9 @@ function prioritizeFirstImage(priorityIndex = 0) {
 function sequentialPreload(centerIndex, current, max, ahead = true) {
     if (current > max) return;
     
+    // Re-check in case the setting changed while a setTimeout was pending
+    if (current > getPreloadCount()) return;
+    
     // Calculate index based on direction
     const preloadIndex = ahead ? centerIndex + current : centerIndex - current;
     
@@ -1853,6 +1856,12 @@ async function loadSettingsModalData() {
         
         // Load optimization settings and update toggle states
         const settings = await API.getSettings();
+        
+        // Re-sync live state from authoritative backend — handles divergence from failed saves
+        if (settings.optimizations) {
+            state.optimizations = { ...state.optimizations, ...settings.optimizations };
+        }
+        
         const thumbnailToggle = document.getElementById('toggleThumbnailCache');
         const videoPosterToggle = document.getElementById('toggleVideoPoster');
         const fillScreenToggle = document.getElementById('toggleFillScreen');

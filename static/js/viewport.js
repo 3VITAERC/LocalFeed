@@ -175,9 +175,19 @@ function _handleIntersection(entries) {
     entries.forEach(entry => {
         const slide = entry.target;
 
-        // Lazy-load trigger
+        // Lazy-load trigger with preload_distance awareness
+        // At preload=0, only fire needsLoad when the slide is actually entering
+        // the real viewport (not just within the 100px rootMargin buffer).
+        // At preload>0, preserve normal rootMargin pre-triggering behavior.
         if (entry.isIntersecting && !slide.querySelector('img, video')) {
-            slide.dispatchEvent(new CustomEvent('needsLoad', { bubbles: true }));
+            const preloadDist = state.optimizations?.preload_distance ?? 3;
+            const rect = entry.boundingClientRect;
+            // rect.top < innerHeight means the slide's top edge has crossed into viewport
+            // rect.bottom > 0 means the slide's bottom edge is still below the top
+            const isEnteringViewport = rect.top < window.innerHeight && rect.bottom > 0;
+            if (preloadDist > 0 || isEnteringViewport) {
+                slide.dispatchEvent(new CustomEvent('needsLoad', { bubbles: true }));
+            }
         }
 
         if (entry.intersectionRatio > mostVisibleRatio) {
