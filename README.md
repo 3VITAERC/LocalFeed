@@ -185,6 +185,7 @@ For even faster loading, enable optional cache optimizations in **Settings → P
 |---------|-------------|--------|
 | **Image Thumbnails** | Resizes images to 1920px max, converts to WebP | 50-80% smaller files |
 | **Video Posters** | Extracts first frame as preview image | Instant preview while video loads |
+| **Preload Distance** | Number of slides to preload ahead (0-10) | Set to 0 to minimize data usage on slow connections |
 
 > **Requires ffmpeg** - Install separately:
 > - macOS: `brew install ffmpeg`
