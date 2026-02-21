@@ -7,6 +7,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Picture Scroller</title>
     <link rel="stylesheet" href="/static/style.css">
+    <!-- Preload JS modules to parallelize fetch and eliminate waterfall -->
+    <link rel="modulepreload" href="/static/js/state.js">
+    <link rel="modulepreload" href="/static/js/api.js">
+    <link rel="modulepreload" href="/static/js/viewport.js">
+    <link rel="modulepreload" href="/static/js/utils/path.js">
+    <link rel="modulepreload" href="/static/js/utils/video.js">
+    <link rel="modulepreload" href="/static/js/utils/gif.js">
     <style>
         /* Additional styles for optimized loading */
         .image-slide {
