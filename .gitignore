@@ -17,6 +17,9 @@ plans/
 .DS_Store
 app/.DS_Store
 
+# File lock files
+*.lock
+
 # Python
 __pycache__/
 *.py[cod]
