@@ -366,7 +366,8 @@ Videos are **always muted**. A separate `<audio>` element handles sound:
 │   playing silently...                                    │
 │                                                           │
 └───────────────────────┬──────────────────────────────────┘
-                        │  currentTime synced every 100ms
+                        │  Sync via playback rate adjustment
+                        │  (not constant seeking — causes gaps)
                         │
             ┌───────────▼──────────────┐
             │  <audio> (in memory)      │
@@ -375,6 +376,18 @@ Videos are **always muted**. A separate `<audio>` element handles sound:
             │  (unlocked by user tap)  │
             └──────────────────────────┘
 ```
+
+### Audio Sync Strategy
+
+To keep audio in sync with video without causing audible gaps, we use **playback rate adjustment**:
+
+| Drift | Action | Why |
+|-------|--------|-----|
+| > 1 second | Seek (`currentTime = video.currentTime`) | Too far off, need hard sync |
+| 0.05–1 second | Adjust `playbackRate` to 0.95 or 1.05 | Smooth catch-up without seek latency |
+| < 0.05 seconds | Normal playback (rate = 1.0) | In sync, no adjustment needed |
+
+This technique is used by professional video players to maintain A/V sync without the brief silence caused by seeking.
 
 ### Dual Audio Element Preloading
 
@@ -400,10 +413,12 @@ To eliminate audio delay when scrolling, **two** `<audio>` elements are used:
 
 **How it works:**
 1. `sequentialPreload()` identifies the +1 slide
-2. `preloadAudioForNextSlide()` loads audio into `_nextAudioEl`
-3. Play/pause trick forces actual buffering (not just metadata)
-4. On scroll, `_attachAudioToActiveVideo()` swaps elements
+2. `preloadAudioForNextSlide()` loads audio into `_nextAudioEl` (created with `muted = true`)
+3. Play/pause trick forces actual buffering (not just metadata) — **audio stays muted to prevent bleed**
+4. On scroll, `_attachAudioToActiveVideo()` swaps elements and unmutes
 5. Preloaded audio plays instantly with no HTTP delay
+
+**Critical:** `_nextAudioEl` is created with `muted = true` and stays muted during the preload play/pause trick. This prevents brief audio snippets from bleeding through before the user scrolls to that slide. The element is only unmuted after being swapped into `_audioEl` for active use.
 
 When you scroll to slide 6:
 1. `video5.pause()` — visual stops
@@ -479,3 +494,6 @@ _scrollGeneration     // Counter: increments on every slide change; used to abor
 | Black flash on video scroll | First frame not rendered — play/pause trick in `onloadeddata` not firing for `isNextSlide` |
 | Multiple videos downloading simultaneously | Stale `sequentialPreload` chains — check `_scrollGeneration` is incremented and passed to chains |
 | Requests not cancelling on fast scroll | `_clearSlideContent` not being called — check `video.networkState === NETWORK_LOADING` condition in `_deactivateMedia` |
+| Audio snippet from next slide before scrolling | `_nextAudioEl` not muted during preload — check that audio element is created with `muted = true` in `preloadAudioForNextSlide()` |
+| Chunky audio / brief gaps during playback | Constant seeking instead of playback rate adjustment — check `_syncAudioToVideo()` uses rate adjustment for small drift, not seeks |
+| Loading spinner stuck forever | Image/video load event not firing — 3-second failsafe in `showLoadingOverlay()` should auto-hide; check `hideLoadingOverlay()` is called in onload/onerror handlers |

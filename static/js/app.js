@@ -1607,6 +1607,7 @@ async function enterFolderMode(folderPath) {
         prioritizeFirstImage();
         updateUI(); // Update UI to show correct image info
         updateTopNavActiveState(); // Update top nav to show active folder
+        scrollToImage(0, 'instant'); // Always start at first image
         
     } catch (error) {
         console.error('Failed to enter folder mode:', error);
@@ -2183,6 +2184,9 @@ function renderFoldersModalList(searchQuery = '') {
     
     const activeFolder = state.currentFolderFilter;
     
+    // Calculate total count across all folders
+    const totalCount = leafFolders.reduce((sum, f) => sum + f.count, 0);
+    
     let filteredFolders = leafFolders;
     if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
@@ -2194,16 +2198,34 @@ function renderFoldersModalList(searchQuery = '') {
     
     const sortedFolders = sortFolders(filteredFolders, currentFolderSort);
     
-    if (sortedFolders.length === 0) {
+    // Build "All" item - always at top, unaffected by search/sort
+    const allItemHtml = `
+        <div class="folders-modal-item${!activeFolder && !state.showingFavoritesOnly && !state.showingTrashOnly ? ' active' : ''}" data-folder-path="__all__">
+            <div class="folders-modal-item-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                </svg>
+            </div>
+            <div class="folders-modal-item-info">
+                <div class="folders-modal-item-name">All</div>
+                <div class="folders-modal-item-path">All images</div>
+            </div>
+            <div class="folders-modal-item-count">${totalCount}</div>
+        </div>
+    `;
+    
+    if (sortedFolders.length === 0 && !searchQuery.trim()) {
         foldersList.innerHTML = `
             <div class="folders-modal-empty">
-                <p>${searchQuery.trim() ? 'No folders match your search' : 'No folders found'}</p>
+                <p>No folders found</p>
             </div>
         `;
         return;
     }
     
-    foldersList.innerHTML = sortedFolders.map(folder => {
+    // Build folder items
+    const folderItemsHtml = sortedFolders.map(folder => {
         const isActive = activeFolder === folder.path;
         
         return `
@@ -2222,12 +2244,28 @@ function renderFoldersModalList(searchQuery = '') {
         `;
     }).join('');
     
+    // Combine: "All" item always at top, then folders
+    foldersList.innerHTML = allItemHtml + folderItemsHtml;
+    
     // Add click handlers
     document.querySelectorAll('.folders-modal-item').forEach(item => {
         item.addEventListener('click', () => {
             const folderPath = item.dataset.folderPath;
             hideFoldersModal();
-            enterFolderMode(folderPath);
+            
+            if (folderPath === '__all__') {
+                // Exit folder mode if in one
+                if (state.showingFolderOnly) {
+                    exitFolderMode();
+                }
+            } else {
+                // If clicking the already-active folder, scroll to first image
+                if (state.currentFolderFilter === folderPath) {
+                    scrollToImage(0, 'instant');
+                } else {
+                    enterFolderMode(folderPath);
+                }
+            }
         });
     });
 }
