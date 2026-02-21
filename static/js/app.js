@@ -1960,7 +1960,34 @@ function showSettingsModal() {
     if (settingsModal) {
         settingsModal.style.display = 'flex';
         loadSettingsModalData();
+        setupSettingsTabs();
     }
+}
+
+/**
+ * Setup settings modal tab switching
+ */
+function setupSettingsTabs() {
+    const tabs = document.querySelectorAll('.settings-tab');
+    const tabContents = document.querySelectorAll('.settings-tab-content');
+    
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const targetTab = tab.dataset.tab;
+            
+            // Update tab active states
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            
+            // Update content visibility
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+                if (content.id === `settingsTab${targetTab.charAt(0).toUpperCase() + targetTab.slice(1)}`) {
+                    content.classList.add('active');
+                }
+            });
+        });
+    });
 }
 
 /**
@@ -2126,13 +2153,12 @@ function hideSettingsModal() {
 }
 
 /**
- * Setup logout button - check auth status and show/hide logout section
+ * Setup logout button - check auth status and show/hide logout button in header
  */
 async function setupLogoutButton() {
-    const logoutSection = document.getElementById('settingsLogoutSection');
-    const logoutBtn = document.getElementById('settingsLogoutBtn');
+    const logoutBtn = document.getElementById('settingsLogoutHeaderBtn');
     
-    if (!logoutSection || !logoutBtn) return;
+    if (!logoutBtn) return;
     
     try {
         const response = await fetch('/api/auth/status');
@@ -2140,7 +2166,7 @@ async function setupLogoutButton() {
         
         // Only show logout button if auth is enabled and user is authenticated
         if (data.auth_enabled && data.authenticated) {
-            logoutSection.style.display = 'block';
+            logoutBtn.style.display = 'inline-flex';
             
             logoutBtn.onclick = async () => {
                 try {
@@ -2160,11 +2186,11 @@ async function setupLogoutButton() {
                 }
             };
         } else {
-            logoutSection.style.display = 'none';
+            logoutBtn.style.display = 'none';
         }
     } catch (error) {
         console.error('Failed to check auth status:', error);
-        logoutSection.style.display = 'none';
+        logoutBtn.style.display = 'none';
     }
 }
 
@@ -2278,6 +2304,8 @@ function renderFoldersModalList(searchQuery = '') {
     
     // Calculate total count across all folders
     const totalCount = leafFolders.reduce((sum, f) => sum + f.count, 0);
+    const likesCount = state.favorites.size;
+    const trashCount = state.trash.size;
     
     let filteredFolders = leafFolders;
     if (searchQuery.trim()) {
@@ -2290,20 +2318,44 @@ function renderFoldersModalList(searchQuery = '') {
     
     const sortedFolders = sortFolders(filteredFolders, currentFolderSort);
     
-    // Build "All" item - always at top, unaffected by search/sort
-    const allItemHtml = `
-        <div class="folders-modal-item${!activeFolder && !state.showingFavoritesOnly && !state.showingTrashOnly ? ' active' : ''}" data-folder-path="__all__">
-            <div class="folders-modal-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                </svg>
+    // Build quick access row with All, Likes, and Trash
+    const isAllActive = !activeFolder && !state.showingFavoritesOnly && !state.showingTrashOnly;
+    const isLikesActive = state.showingFavoritesOnly && !state.showingTrashOnly;
+    const isTrashActive = state.showingTrashOnly;
+    
+    const quickAccessHtml = `
+        <div class="folders-quick-access">
+            <div class="folders-quick-access-item${isAllActive ? ' active' : ''}" data-folder-path="__all__">
+                <div class="folders-quick-access-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+                        <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+                        <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+                        <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+                    </svg>
+                </div>
+                <div class="folders-quick-access-label">All</div>
+                <div class="folders-quick-access-count">${totalCount}</div>
             </div>
-            <div class="folders-modal-item-info">
-                <div class="folders-modal-item-name">All</div>
-                <div class="folders-modal-item-path">All images</div>
+            <div class="folders-quick-access-item${isLikesActive ? ' active' : ''}" data-folder-path="__likes__">
+                <div class="folders-quick-access-icon">
+                    <svg viewBox="0 0 24 24" fill="${isLikesActive ? '#FF2D55' : 'none'}" stroke="${isLikesActive ? '#FF2D55' : 'currentColor'}" stroke-width="2">
+                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                    </svg>
+                </div>
+                <div class="folders-quick-access-label">Likes</div>
+                <div class="folders-quick-access-count">${likesCount}</div>
             </div>
-            <div class="folders-modal-item-count">${totalCount}</div>
+            <div class="folders-quick-access-item${isTrashActive ? ' active' : ''}" data-folder-path="__trash__">
+                <div class="folders-quick-access-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="${isTrashActive ? '#FF3B30' : 'currentColor'}" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </div>
+                <div class="folders-quick-access-label">Trash</div>
+                <div class="folders-quick-access-count">${trashCount}</div>
+            </div>
         </div>
     `;
     
@@ -2336,27 +2388,51 @@ function renderFoldersModalList(searchQuery = '') {
         `;
     }).join('');
     
-    // Combine: "All" item always at top, then folders
-    foldersList.innerHTML = allItemHtml + folderItemsHtml;
+    // Combine: quick access row at top, then folder items
+    foldersList.innerHTML = quickAccessHtml + folderItemsHtml;
     
-    // Add click handlers
+    // Add click handlers for quick access items
+    document.querySelectorAll('.folders-quick-access-item').forEach(item => {
+        item.addEventListener('click', async () => {
+            const folderPath = item.dataset.folderPath;
+            hideFoldersModal();
+            
+            if (folderPath === '__all__') {
+                // Exit all filter modes
+                if (state.showingFolderOnly) exitFolderMode();
+                if (state.showingFavoritesOnly) exitFavoritesMode();
+                if (state.showingTrashOnly) exitTrashMode();
+                state.currentTopNavFolder = 'all';
+                updateTopNavActiveState();
+            } else if (folderPath === '__likes__') {
+                // Enter favorites mode
+                if (state.showingFolderOnly) exitFolderMode();
+                if (state.showingTrashOnly) exitTrashMode();
+                if (!state.showingFavoritesOnly) await enterFavoritesMode();
+                state.currentTopNavFolder = 'likes';
+                updateTopNavActiveState();
+            } else if (folderPath === '__trash__') {
+                // Enter trash mode
+                if (state.showingFolderOnly) exitFolderMode();
+                if (state.showingFavoritesOnly) exitFavoritesMode();
+                if (!state.showingTrashOnly) await viewTrash();
+                state.currentTopNavFolder = 'trash';
+                updateTopNavActiveState();
+            }
+        });
+    });
+    
+    // Add click handlers for folder items
     document.querySelectorAll('.folders-modal-item').forEach(item => {
         item.addEventListener('click', () => {
             const folderPath = item.dataset.folderPath;
             hideFoldersModal();
             
-            if (folderPath === '__all__') {
-                // Exit folder mode if in one
-                if (state.showingFolderOnly) {
-                    exitFolderMode();
-                }
+            // If clicking the already-active folder, scroll to first image
+            if (state.currentFolderFilter === folderPath) {
+                scrollToImage(0, 'instant');
             } else {
-                // If clicking the already-active folder, scroll to first image
-                if (state.currentFolderFilter === folderPath) {
-                    scrollToImage(0, 'instant');
-                } else {
-                    enterFolderMode(folderPath);
-                }
+                enterFolderMode(folderPath);
             }
         });
     });

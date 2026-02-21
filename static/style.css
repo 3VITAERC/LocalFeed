@@ -279,7 +279,7 @@ html, body {
     top: 0;
     left: 0;
     height: 100%;
-    background: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.5);
     border-radius: 2px;
     width: 0%;
     z-index: 1;
@@ -299,8 +299,8 @@ html, body {
     right: -6px;
     top: 50%;
     transform: translateY(-50%);
-    width: 12px;
-    height: 12px;
+    width: 8px;
+    height: 8px;
     background: #fff;
     border-radius: 50%;
     opacity: 1; /* Always visible for playhead indication */
@@ -468,6 +468,7 @@ html, body {
     color: white;
     text-decoration: none;
     position: relative;
+    filter: drop-shadow(0 1px 10px rgba(0, 0, 0, 0.02));
 }
 
 .action-btn:active {
@@ -659,7 +660,7 @@ html, body {
 }
 
 .dropdown-option span {
-    font-size: 14px;
+    font-size: 15px;
     color: white;
     white-space: nowrap;
 }
@@ -734,7 +735,7 @@ html, body {
     border: none;
     background: transparent;
     color: rgba(255, 255, 255, 0.6);
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 500;
     white-space: nowrap;
     cursor: pointer;
@@ -1523,7 +1524,7 @@ html, body {
     border-radius: 16px;
     width: 90%;
     max-width: 400px;
-    max-height: 85vh;
+    height: 75vh;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -1533,6 +1534,164 @@ html, body {
     padding: 16px 20px;
     overflow-y: auto;
     flex: 1;
+}
+
+/* Logout button in header - matches Review Trash button style */
+.settings-logout-header-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 6px 12px;
+    margin-right: 8px;
+    background: rgba(255, 59, 48, 0.1);
+    border: 1px solid rgba(255, 59, 48, 0.2);
+    border-radius: 8px;
+    color: #FF3B30;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.settings-logout-header-btn:hover {
+    background: rgba(255, 59, 48, 0.15);
+}
+
+.settings-logout-header-btn:active {
+    transform: scale(0.98);
+}
+
+/* Tab Bar */
+.settings-tab-bar {
+    display: flex;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 0 12px;
+}
+
+.settings-tab {
+    padding: 12px 16px;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    position: relative;
+    transition: color 0.2s;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.settings-tab:hover {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.settings-tab.active {
+    color: white;
+}
+
+.settings-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 16px;
+    right: 16px;
+    height: 2px;
+    background: white;
+    border-radius: 1px;
+}
+
+/* Logout footer - matches Review Trash button style, slimmer */
+.settings-logout-footer {
+    padding: 8px 0;
+    margin-bottom: 8px;
+    text-align: center;
+}
+
+.settings-logout-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: rgba(255, 59, 48, 0.1);
+    border: 1px solid rgba(255, 59, 48, 0.2);
+    border-radius: 12px;
+    color: #FF3B30;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.settings-logout-link:hover {
+    background: rgba(255, 59, 48, 0.15);
+}
+
+.settings-logout-link:active {
+    transform: scale(0.98);
+}
+
+/* Tab Content */
+.settings-tab-content {
+    display: none;
+}
+
+.settings-tab-content.active {
+    display: block;
+}
+
+/* Tab description text */
+.settings-tab-description {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+.ffmpeg-required {
+    color: #00FF00;
+    font-weight: 500;
+}
+
+/* Toggle Item (used in Display and Performance tabs) */
+.settings-toggle-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.settings-toggle-item:last-child {
+    border-bottom: none;
+}
+
+.settings-toggle-info {
+    flex: 1;
+}
+
+.settings-toggle-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: white;
+    margin-bottom: 2px;
+}
+
+.settings-toggle-desc {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* Cache row (for cache size + clear button) */
+.settings-cache-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 0;
+    margin-top: 8px;
 }
 
 /* Add folder form in modal */
@@ -1626,14 +1785,6 @@ html, body {
 /* Settings folder section */
 .settings-folder-section {
     margin-bottom: 16px;
-}
-
-.settings-add-folder-section {
-    margin-top: 25px;
-}
-
-.settings-folder-list-section {
-    margin-top: 20px;
 }
 
 .settings-folder-section h4 {
@@ -1870,6 +2021,84 @@ html, body {
 }
 
 .folders-modal-item.active .folders-modal-item-count {
+    background: rgba(255, 215, 0, 0.2);
+    color: #FFD700;
+}
+
+/* ============ Folders Quick Access Row ============ */
+
+.folders-quick-access {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.folders-quick-access-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    gap: 6px;
+}
+
+.folders-quick-access-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.folders-quick-access-item:active {
+    transform: scale(0.97);
+}
+
+.folders-quick-access-item.active {
+    background: rgba(255, 215, 0, 0.15);
+    border: 1px solid rgba(255, 215, 0, 0.3);
+}
+
+.folders-quick-access-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.folders-quick-access-icon svg {
+    width: 24px;
+    height: 24px;
+    stroke: rgba(255, 255, 255, 0.7);
+}
+
+.folders-quick-access-item.active .folders-quick-access-icon svg {
+    stroke: #FFD700;
+}
+
+.folders-quick-access-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.folders-quick-access-item.active .folders-quick-access-label {
+    color: #FFD700;
+}
+
+.folders-quick-access-count {
+    font-size: 14px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 8px;
+    border-radius: 10px;
+    min-width: 24px;
+    text-align: center;
+}
+
+.folders-quick-access-item.active .folders-quick-access-count {
     background: rgba(255, 215, 0, 0.2);
     color: #FFD700;
 }

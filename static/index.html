@@ -276,6 +276,7 @@
         <div class="settings-modal-content">
             <div class="info-modal-header">
                 <h3>Settings</h3>
+                <button class="settings-logout-header-btn" id="settingsLogoutHeaderBtn" style="display: none;">Log Out</button>
                 <button class="info-modal-close" id="settingsModalClose">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -283,96 +284,77 @@
                     </svg>
                 </button>
             </div>
+            
+            <!-- Tab Bar -->
+            <div class="settings-tab-bar">
+                <button class="settings-tab active" data-tab="folders">Folders</button>
+                <button class="settings-tab" data-tab="display">Display</button>
+                <button class="settings-tab" data-tab="performance">Performance</button>
+            </div>
+            
             <div class="settings-modal-body" id="settingsModalBody">
-                <!-- Cache Settings Section (Collapsible) -->
-                <div class="settings-cache-section">
-                    <div class="settings-cache-header" id="cacheSettingsHeader">
-                        <h4>Performance Settings - Experimental</h4>
-                        <span class="settings-cache-arrow">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <polyline points="6 9 12 15 18 9"></polyline>
+                <!-- Folders Tab Content -->
+                <div class="settings-tab-content active" id="settingsTabFolders">
+                    <!-- Add folder form -->
+                    <div class="settings-folder-section">
+                        <h4>Add Folder</h4>
+                        <form class="settings-add-folder-form" id="settingsAddFolderForm">
+                            <input
+                                type="text"
+                                id="settingsFolderPath"
+                                placeholder="Enter folder path (e.g., ~/Pictures/July)"
+                                autocapitalize="off"
+                                autocorrect="off"
+                            >
+                            <button type="submit">Add</button>
+                        </form>
+                    </div>
+                    
+                    <!-- Message area -->
+                    <div id="settingsMessage" class="settings-message" style="display: none;"></div>
+                    
+                    <!-- Stats -->
+                    <div class="settings-stats">
+                        <div class="settings-stat-card">
+                            <div class="settings-stat-number" id="settingsFolderCount">0</div>
+                            <div class="settings-stat-label">Folders</div>
+                        </div>
+                        <div class="settings-stat-card">
+                            <div class="settings-stat-number" id="settingsImageCount">0</div>
+                            <div class="settings-stat-label">Images</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Folder list -->
+                    <div class="settings-folder-section">
+                        <h4>Folders</h4>
+                        <div id="settingsFolderList">
+                            <div class="settings-empty-state">
+                                <p>No folders added yet</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Trash section -->
+                    <div class="settings-trash-section">
+                        <button class="settings-trash-btn" id="settingsTrashBtn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                             </svg>
-                        </span>
-                    </div>
-                    <div class="settings-cache-content" id="cacheSettingsContent" style="display: none;">
-                    <p class="settings-cache-description">
-                        Performance optimizations that create cached versions for faster loading.
-                        <span class="ffmpeg-required">Requires FFMPEG</span>
-                    </p>
-                    
-                    <!-- Thumbnail Cache Toggle -->
-                    <div class="settings-cache-item">
-                        <div class="settings-cache-info">
-                            <div class="settings-cache-text">
-                                <div class="settings-cache-title">Image Thumbnails</div>
-                                <div class="settings-cache-desc">Resize images to screen size, convert to WebP</div>
-                            </div>
-                        </div>
-                        <label class="settings-toggle">
-                            <input type="checkbox" id="toggleThumbnailCache">
-                            <span class="settings-toggle-slider"></span>
-                        </label>
-                    </div>
-                    
-                    <!-- Video Poster Toggle -->
-                    <div class="settings-cache-item">
-                        <div class="settings-cache-info">
-                            <div class="settings-cache-text">
-                                <div class="settings-cache-title">Video Posters</div>
-                                <div class="settings-cache-desc">Show instant preview while video loads</div>
-                            </div>
-                        </div>
-                        <label class="settings-toggle">
-                            <input type="checkbox" id="toggleVideoPoster">
-                            <span class="settings-toggle-slider"></span>
-                        </label>
-                    </div>
-                    
-                    <!-- Preload Distance -->
-                    <div class="settings-cache-item">
-                        <div class="settings-cache-info">
-                            <div class="settings-cache-text">
-                                <div class="settings-cache-title">Preload Distance</div>
-                                <div class="settings-cache-desc">Slides to preload ahead: <span id="preloadDistanceValue">3</span></div>
-                            </div>
-                        </div>
-                        <input type="range" id="preloadDistanceSlider" min="0" max="10" value="3" class="settings-slider">
-                    </div>
-                    
-                    <!-- Clear Cache Button -->
-                    <div class="settings-cache-actions">
-                        <div class="settings-cache-info">
-                            <div class="settings-cache-text">
-                                <div class="settings-cache-title">Cache Size</div>
-                                <div class="settings-cache-desc" id="cacheSizeDisplay">Calculating...</div>
-                            </div>
-                        </div>
-                        <button class="settings-clear-cache-btn" id="clearCacheBtn">
-                            Clear Cache
+                            <span>Review Trash</span>
+                            <span class="trash-badge" id="settingsTrashBadge" style="display: none;">0</span>
                         </button>
-                    </div>
                     </div>
                 </div>
                 
-                <!-- Display Settings Section -->
-                <div class="settings-cache-section">
-                    <div class="settings-cache-header" id="displaySettingsHeader">
-                        <h4>Display</h4>
-                        <span class="settings-cache-arrow">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <polyline points="6 9 12 15 18 9"></polyline>
-                            </svg>
-                        </span>
-                    </div>
-                    <div class="settings-cache-content" id="displaySettingsContent" style="display: none;">
-                    
+                <!-- Display Tab Content -->
+                <div class="settings-tab-content" id="settingsTabDisplay">
                     <!-- Fill Screen Toggle -->
-                    <div class="settings-cache-item">
-                        <div class="settings-cache-info">
-                            <div class="settings-cache-text">
-                                <div class="settings-cache-title">Fill Screen</div>
-                                <div class="settings-cache-desc">Crop images to fill screen - optimized for iPhone</div>
-                            </div>
+                    <div class="settings-toggle-item">
+                        <div class="settings-toggle-info">
+                            <div class="settings-toggle-title">Fill Screen</div>
+                            <div class="settings-toggle-desc">Crop images to fill screen - optimized for iPhone</div>
                         </div>
                         <label class="settings-toggle">
                             <input type="checkbox" id="toggleFillScreen">
@@ -381,12 +363,10 @@
                     </div>
                     
                     <!-- Auto-Advance Toggle -->
-                    <div class="settings-cache-item">
-                        <div class="settings-cache-info">
-                            <div class="settings-cache-text">
-                                <div class="settings-cache-title">Auto-Advance</div>
-                                <div class="settings-cache-desc">Auto-scroll when video ends or after delay for photos</div>
-                            </div>
+                    <div class="settings-toggle-item">
+                        <div class="settings-toggle-info">
+                            <div class="settings-toggle-title">Auto-Advance</div>
+                            <div class="settings-toggle-desc">Auto-scroll when video ends or after delay for photos</div>
                         </div>
                         <label class="settings-toggle">
                             <input type="checkbox" id="toggleAutoAdvance">
@@ -395,80 +375,64 @@
                     </div>
                     
                     <!-- Auto-Advance Delay -->
-                    <div class="settings-cache-item" id="autoAdvanceDelayItem">
-                        <div class="settings-cache-info">
-                            <div class="settings-cache-text">
-                                <div class="settings-cache-title">Photo Delay</div>
-                                <div class="settings-cache-desc">Seconds before auto-advancing: <span id="autoAdvanceDelayValue">3</span>s</div>
-                            </div>
+                    <div class="settings-toggle-item" id="autoAdvanceDelayItem">
+                        <div class="settings-toggle-info">
+                            <div class="settings-toggle-title">Photo Delay</div>
+                            <div class="settings-toggle-desc">Seconds before auto-advancing: <span id="autoAdvanceDelayValue">3</span>s</div>
                         </div>
                         <input type="range" id="autoAdvanceDelaySlider" min="1" max="10" value="3" class="settings-slider">
                     </div>
+                </div>
+                
+                <!-- Performance Tab Content -->
+                <div class="settings-tab-content" id="settingsTabPerformance">
+                    <p class="settings-tab-description">
+                        Performance optimizations create cached versions for faster loading.
+                        <span class="ffmpeg-required">Requires FFMPEG</span>
+                    </p>
                     
-                    </div>
-                </div>
-                
-                <!-- Add folder form -->
-                <div class="settings-folder-section settings-add-folder-section">
-                    <h4>Add Folder</h4>
-                    <form class="settings-add-folder-form" id="settingsAddFolderForm">
-                        <input
-                            type="text"
-                            id="settingsFolderPath"
-                            placeholder="Enter folder path (e.g., ~/Pictures/July)"
-                            autocapitalize="off"
-                            autocorrect="off"
-                        >
-                        <button type="submit">Add</button>
-                    </form>
-                </div>
-                
-                <!-- Message area -->
-                <div id="settingsMessage" class="settings-message" style="display: none;"></div>
-                
-                <!-- Stats -->
-                <div class="settings-stats">
-                    <div class="settings-stat-card">
-                        <div class="settings-stat-number" id="settingsFolderCount">0</div>
-                        <div class="settings-stat-label">Folders</div>
-                    </div>
-                    <div class="settings-stat-card">
-                        <div class="settings-stat-number" id="settingsImageCount">0</div>
-                        <div class="settings-stat-label">Images</div>
-                    </div>
-                </div>
-                
-                <!-- Trash section -->
-                <div class="settings-trash-section">
-                    <button class="settings-trash-btn" id="settingsTrashBtn">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                        </svg>
-                        <span>Review Trash</span>
-                        <span class="trash-badge" id="settingsTrashBadge" style="display: none;">0</span>
-                    </button>
-                </div>
-                
-                <!-- Logout section (only shown when auth is enabled) -->
-                <div class="settings-logout-section" id="settingsLogoutSection" style="display: none;">
-                    <button class="settings-logout-btn" id="settingsLogoutBtn">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                            <polyline points="16 17 21 12 16 7"></polyline>
-                            <line x1="21" y1="12" x2="9" y2="12"></line>
-                        </svg>
-                        <span>Log Out</span>
-                    </button>
-                </div>
-                
-                <!-- Folder list -->
-                <div class="settings-folder-section settings-folder-list-section">
-                    <h4>Folders</h4>
-                    <div id="settingsFolderList">
-                        <div class="settings-empty-state">
-                            <p>No folders added yet</p>
+                    <!-- Thumbnail Cache Toggle -->
+                    <div class="settings-toggle-item">
+                        <div class="settings-toggle-info">
+                            <div class="settings-toggle-title">Image Thumbnails</div>
+                            <div class="settings-toggle-desc">Resize images to screen size, convert to WebP</div>
                         </div>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="toggleThumbnailCache">
+                            <span class="settings-toggle-slider"></span>
+                        </label>
+                    </div>
+                    
+                    <!-- Video Poster Toggle -->
+                    <div class="settings-toggle-item">
+                        <div class="settings-toggle-info">
+                            <div class="settings-toggle-title">Video Posters</div>
+                            <div class="settings-toggle-desc">Show instant preview while video loads</div>
+                        </div>
+                        <label class="settings-toggle">
+                            <input type="checkbox" id="toggleVideoPoster">
+                            <span class="settings-toggle-slider"></span>
+                        </label>
+                    </div>
+                    
+                    <!-- Preload Distance -->
+                    <div class="settings-toggle-item">
+                        <div class="settings-toggle-info">
+                            <div class="settings-toggle-title">Preload Distance</div>
+                            <div class="settings-toggle-desc">Slides to preload ahead: <span id="preloadDistanceValue">3</span></div>
+                        </div>
+                        <input type="range" id="preloadDistanceSlider" min="0" max="10" value="3" class="settings-slider">
+                    </div>
+                    
+                    <!-- Clear Cache Button -->
+                    <div class="settings-cache-row">
+                        <div class="settings-toggle-info">
+                            <div class="settings-toggle-title">Cache Size</div>
+                            <div class="settings-toggle-desc" id="cacheSizeDisplay">Calculating...</div>
+                        </div>
+                        <button class="settings-clear-cache-btn" id="clearCacheBtn">
+                            Clear Cache
+                        </button>
                     </div>
                 </div>
                 
